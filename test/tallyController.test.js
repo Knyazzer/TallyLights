@@ -33,7 +33,10 @@ describe('TallyController', () => {
 
   it('ignores manual updates when in atem mode', () => {
     const c = make({ defaultMode: 'atem' })
+    const render = vi.fn()
+    c.on('render', render)
     c.manualSet(1, 'program')
+    expect(render).not.toHaveBeenCalled()
     expect(c.computeLampStates().find(l => l.id === 1).program).toBe(false)
   })
 
@@ -78,6 +81,11 @@ describe('TallyController', () => {
   it('setMode rejects invalid mode', () => {
     const c = make()
     expect(() => c.setMode('bogus')).toThrow()
+  })
+
+  it('manualSet rejects invalid state', () => {
+    const c = make()
+    expect(() => c.manualSet(1, 'typo')).toThrow(/typo/)
   })
 
   it('emits mode event on setMode', () => {

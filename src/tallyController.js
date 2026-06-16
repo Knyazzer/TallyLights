@@ -34,6 +34,7 @@ export class TallyController extends EventEmitter {
   }
 
   manualSet(input, state) {
+    if (state !== 'program' && state !== 'preview' && state !== 'off') throw new Error(`invalid state: ${state}`)
     this.manualState.program.delete(input)
     this.manualState.preview.delete(input)
     if (state === 'program') this.manualState.program.add(input)
