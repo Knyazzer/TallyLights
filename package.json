@@ -1,0 +1,22 @@
+{
+  "name": "tallylights",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "ATEM/Companion -> AVMATRIX TS3019-6 tally bridge over COM (Firmata)",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "atem-connection": "^3.9.0",
+    "express": "^4.19.2",
+    "firmata": "^2.3.0",
+    "serialport": "^12.0.0"
+  },
+  "devDependencies": {
+    "supertest": "^7.0.0",
+    "vitest": "^2.0.0"
+  }
+}
