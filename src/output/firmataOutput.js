@@ -26,6 +26,8 @@ export class FirmataOutput {
   }
 
   async connect() {
+    // Reset pin cache so a reconnect (new board) always initializes every pin.
+    this.pinValues = new Map()
     const factory = await this._resolveFactory()
     return new Promise((resolve, reject) => {
       try {
@@ -47,6 +49,7 @@ export class FirmataOutput {
   }
 
   _write(pin, value) {
+    if (!this.board) return
     if (this.pinValues.get(pin) === value) return
     this.board.digitalWrite(pin, value)
     this.pinValues.set(pin, value)
@@ -69,5 +72,6 @@ export class FirmataOutput {
     this.allOff()
     if (this.board.transport && this.board.transport.close) this.board.transport.close()
     this.ready = false
+    this.board = null
   }
 }
