@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Runtime config (создаётся из config.example.json при первом запуске)
+config.json
+
+# Logs
+*.log
+logs/
+
+# Build / dist
+dist/
+build/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
