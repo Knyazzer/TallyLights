@@ -33,7 +33,8 @@ export function validateConfig(cfg) {
 
 export function loadConfig(configPath, examplePath) {
   if (!fs.existsSync(configPath)) fs.copyFileSync(examplePath, configPath)
-  const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+  // Strip a leading UTF-8 BOM — Windows editors (Notepad) add one and it breaks JSON.parse.
+  const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8').replace(/^﻿/, ''))
   const errors = validateConfig(cfg)
   if (errors.length) throw new Error('Invalid config:\n' + errors.join('\n'))
   cfg.lamps = cfg.lamps.map(withPins) // attach hardcoded pins for the app to use

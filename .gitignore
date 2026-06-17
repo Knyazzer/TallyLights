@@ -8,9 +8,9 @@ config.json
 *.log
 logs/
 
-# Build / dist
+# Build / dist (keep build scripts, ignore staged payload + output)
 dist/
-build/
+build/stage/
 
 # OS / editor
 .DS_Store

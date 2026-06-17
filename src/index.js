@@ -1,3 +1,4 @@
+import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { loadConfig, saveConfig } from './config.js'
@@ -17,7 +18,19 @@ import { log } from './logger.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.join(__dirname, '..')
-const CONFIG_PATH = path.join(ROOT, 'config.json')
+
+// Where the live, writable config.json lives. When the app is installed under a
+// read-only location (Program Files), fall back to %APPDATA%\TallyLights so the
+// config (and the auto-discovered ATEM ip) can be saved. In a dev checkout the
+// project root is writable, so it stays there. Override with TALLY_DATA_DIR.
+function resolveDataDir(root) {
+  if (process.env.TALLY_DATA_DIR) return process.env.TALLY_DATA_DIR
+  try { fs.accessSync(root, fs.constants.W_OK); return root } catch { /* read-only */ }
+  const base = process.env.APPDATA || process.env.HOME || root
+  return path.join(base, 'TallyLights')
+}
+const DATA_DIR = resolveDataDir(ROOT)
+const CONFIG_PATH = path.join(DATA_DIR, 'config.json')
 const EXAMPLE_PATH = path.join(ROOT, 'config.example.json')
 
 /**
@@ -253,9 +266,20 @@ export async function createServer(cfg, opts = {}) {
 // every platform (file:///C:/… on Windows, file:///… on POSIX) — a hand-built
 // `file://` + path string does NOT match on Windows (file:// vs file:///).
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  fs.mkdirSync(DATA_DIR, { recursive: true })
   const cfg = loadConfig(CONFIG_PATH, EXAMPLE_PATH)
   const srv = await createServer(cfg)
   await srv.start()
+
+  // Open the admin UI in the default browser (disable with TALLY_NO_OPEN=1).
+  if (cfg.http.enabled && !process.env.TALLY_NO_OPEN) {
+    const url = `http://localhost:${cfg.http.port}`
+    try {
+      const { spawn } = await import('node:child_process')
+      if (process.platform === 'win32') spawn('cmd', ['/c', 'start', '', url], { detached: true, stdio: 'ignore' }).unref()
+      else spawn(process.platform === 'darwin' ? 'open' : 'xdg-open', [url], { detached: true, stdio: 'ignore' }).unref()
+    } catch { /* ignore */ }
+  }
 
   let shuttingDown = false
   const shutdown = async () => {

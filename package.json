@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build:installer": "powershell -ExecutionPolicy Bypass -File build/build-installer.ps1"
   },
   "dependencies": {
     "atem-connection": "^3.9.0",
