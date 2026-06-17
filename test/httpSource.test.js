@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
+import http from 'node:http'
 import request from 'supertest'
 import { TallyController } from '../src/tallyController.js'
 import { createApp } from '../src/sources/httpSource.js'
@@ -184,35 +185,36 @@ describe('httpSource', () => {
   // ── SSE ────────────────────────────────────────────────────────────────────
   it('GET /events returns SSE headers and initial data', async () => {
     const { app } = makeApp()
-    // Start a real server so we can connect and then close it
     const server = app.listen(0)
     const port = server.address().port
     await new Promise((resolve, reject) => {
-      const req = globalThis.http
-        ? globalThis.http.get(`http://127.0.0.1:${port}/events`, (res) => {
+      const req = http.get(`http://127.0.0.1:${port}/events`, (res) => {
+        try {
+          expect(res.headers['content-type']).toMatch(/text\/event-stream/)
+        } catch (e) {
+          req.destroy()
+          return reject(e)
+        }
+        let buf = ''
+        res.on('data', (chunk) => {
+          buf += chunk.toString()
+          const match = buf.match(/^data: (.+)\n\n/m)
+          if (match) {
             try {
-              expect(res.headers['content-type']).toMatch(/text\/event-stream/)
-            } catch (e) { reject(e) }
-            res.on('data', () => {}) // drain
-            res.destroy()
-            resolve()
-          })
-        : null
-      // Use dynamic import of http since it's a Node built-in
-      if (!req) {
-        import('node:http').then(({ default: http }) => {
-          http.get(`http://127.0.0.1:${port}/events`, (res) => {
-            try {
-              expect(res.headers['content-type']).toMatch(/text\/event-stream/)
+              const payload = JSON.parse(match[1])
+              expect(payload).toHaveProperty('mode')
+              expect(payload).toHaveProperty('lamps')
               resolve()
             } catch (e) {
               reject(e)
+            } finally {
+              req.destroy()
             }
-            res.on('data', () => {}) // drain so the event fires
-            res.destroy()
-          }).on('error', reject)
+          }
         })
-      }
+        res.on('error', reject)
+      })
+      req.on('error', reject)
     })
     await new Promise((resolve) => server.close(resolve))
   }, 8000)
