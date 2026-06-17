@@ -165,7 +165,11 @@ $('#scan').onclick = async () => {
 $('#add-lamp').onclick = () => addLampRow()
 $('#settings').onsubmit = async (e) => {
   e.preventDefault()
-  try { await api('/api/config', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(collectConfig()) }); alert('Сохранено') }
+  try {
+    const res = await api('/api/config', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(collectConfig()) })
+    if (res && res.restartRequired) alert('Сохранено. Перезапустите сервер для применения: ' + (res.restartFields || []).join(', '))
+    else alert('Сохранено и применено')
+  }
   catch { alert('Ошибка валидации конфига') }
 }
 

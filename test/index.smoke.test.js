@@ -185,4 +185,61 @@ describe('createServer', () => {
     expect(srv.controller.computeLampStates()[0].program).toBe(false)
     await srv.stop()
   })
+
+  it('saveConfigFn hot-applies lamps and returns restartRequired:false when only lamps changed', async () => {
+    const setLampsCalls = []
+    const srv = await createServer(cfg, {
+      outputFactory: () => ({
+        connect: async () => {},
+        render: () => {},
+        allOff: () => {},
+        close: async () => {},
+        ready: true,
+        setLamps: (l) => setLampsCalls.push(l)
+      }),
+      atemFactory: () => ({ on: () => {}, connect: () => {}, disconnect: async () => {}, state: {} }),
+      saveConfigImpl: () => {}  // skip real disk I/O
+    })
+
+    const newLamps = [{ id: 2, atemInput: 2, previewPin: 4, activePin: 5 }]
+    const next = { ...cfg, lamps: newLamps }
+    const res = await request(srv.app)
+      .put('/api/config')
+      .send(next)
+      .expect(200)
+
+    expect(res.body.restartRequired).toBe(false)
+    expect(res.body.restartFields).toEqual([])
+    expect(setLampsCalls).toHaveLength(1)
+    expect(setLampsCalls[0]).toEqual(newLamps)
+    // controller.setLamps was also called
+    expect(srv.controller.computeLampStates()).toHaveLength(1)
+    expect(srv.controller.computeLampStates()[0].id).toBe(2)
+    await srv.stop()
+  })
+
+  it('saveConfigFn returns restartRequired:true and restartFields when comPort changed', async () => {
+    const srv = await createServer(cfg, {
+      outputFactory: () => ({
+        connect: async () => {},
+        render: () => {},
+        allOff: () => {},
+        close: async () => {},
+        ready: true,
+        setLamps: () => {}
+      }),
+      atemFactory: () => ({ on: () => {}, connect: () => {}, disconnect: async () => {}, state: {} }),
+      saveConfigImpl: () => {}
+    })
+
+    const next = { ...cfg, comPort: 'COM99' }
+    const res = await request(srv.app)
+      .put('/api/config')
+      .send(next)
+      .expect(200)
+
+    expect(res.body.restartRequired).toBe(true)
+    expect(res.body.restartFields).toContain('comPort')
+    await srv.stop()
+  })
 })

@@ -6,6 +6,7 @@ import { FirmataOutput } from './output/firmataOutput.js'
 import { AtemSource } from './sources/atemSource.js'
 import { listInterfaces, hostsForSubnet, scan } from './sources/atemDiscovery.js'
 import { createApp } from './sources/httpSource.js'
+import { diffRestartFields } from './diffRestartFields.js'
 import { log } from './logger.js'
 
 // NOTE: 'serialport' is NOT imported at the top level — its native bindings
@@ -39,7 +40,11 @@ async function listSerialPorts() {
  * @returns {Promise<{app, controller, output, atemSource, start(), stop()}>}
  */
 export async function createServer(cfg, opts = {}) {
-  const { outputFactory, atemFactory, configPath = CONFIG_PATH } = opts
+  const { outputFactory, atemFactory, configPath = CONFIG_PATH, saveConfigImpl = saveConfig } = opts
+
+  // The currently running config. Reassigned on every successful save so that
+  // getConfig() and restart-field diffs always compare against live state.
+  let currentCfg = cfg
 
   // ── Controller ──────────────────────────────────────────────────────────────
   const controller = new TallyController({
@@ -72,8 +77,19 @@ export async function createServer(cfg, opts = {}) {
   // ── Express app ─────────────────────────────────────────────────────────────
   const app = createApp({
     controller,
-    getConfig: () => cfg,
-    saveConfigFn: (next) => saveConfig(configPath, next),
+    getConfig: () => currentCfg,
+    saveConfigFn: (next) => {
+      // Persist + validate first (throws on invalid → HTTP layer maps to 422).
+      saveConfigImpl(configPath, next)
+      // Hybrid hot-apply: the lamp map and onAtemDisconnect take effect live;
+      // comPort / baudRate / atem.ip / http.port require a restart.
+      const restartFields = diffRestartFields(currentCfg, next)
+      controller.setLamps(next.lamps)
+      if (typeof output.setLamps === 'function') output.setLamps(next.lamps)
+      controller.onAtemDisconnect = next.onAtemDisconnect
+      currentCfg = next
+      return { ...next, restartRequired: restartFields.length > 0, restartFields }
+    },
     // listPorts: lazy import to avoid loading native serialport at module parse time
     listPorts: () => listSerialPorts(),
     scanAtem: async () => {
@@ -87,7 +103,7 @@ export async function createServer(cfg, opts = {}) {
       return all
     },
     testLamp: async (id, color) => {
-      const lamp = cfg.lamps.find(l => l.id === id)
+      const lamp = currentCfg.lamps.find(l => l.id === id)
       if (!lamp) {
         log.warn(`testLamp: unknown lamp id ${id}`)
         return
