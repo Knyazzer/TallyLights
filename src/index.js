@@ -88,7 +88,10 @@ export async function createServer(cfg, opts = {}) {
     },
     testLamp: async (id, color) => {
       const lamp = cfg.lamps.find(l => l.id === id)
-      if (!lamp) return
+      if (!lamp) {
+        log.warn(`testLamp: unknown lamp id ${id}`)
+        return
+      }
       output.render([{
         id,
         activePin: lamp.activePin,
@@ -113,13 +116,18 @@ export async function createServer(cfg, opts = {}) {
       // Connect to COM port; failure is logged but never crashes the process.
       try {
         await output.connect()
-        status.com = true
       } catch (e) {
         log.error('COM connect failed:', e?.message || e)
       }
 
       // Start ATEM polling only when enabled in config.
-      if (cfg.atem.enabled) atemSource.start()
+      if (cfg.atem.enabled) {
+        try {
+          atemSource.start()
+        } catch (e) {
+          log.error('ATEM start failed:', e?.message || e)
+        }
+      }
 
       // Start HTTP server when enabled.
       if (cfg.http.enabled) {
@@ -151,7 +159,10 @@ if (import.meta.url === `file://${process.argv[1].replace(/\\/g, '/')}`) {
   const srv = await createServer(cfg)
   await srv.start()
 
+  let shuttingDown = false
   const shutdown = async () => {
+    if (shuttingDown) return
+    shuttingDown = true
     log.info('shutting down…')
     await srv.stop()
     process.exit(0)
