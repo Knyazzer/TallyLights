@@ -183,7 +183,7 @@ function setStatus(conn) {
   $('#st-atem').classList.toggle('on', !!conn?.atem)
   $('#st-com').classList.toggle('on', !!conn?.com)
   const nameEl = $('#atem-name')
-  if (nameEl) nameEl.textContent = conn?.atem ? (conn.atemName || '') : ''
+  if (nameEl) nameEl.textContent = conn?.atem ? (conn.atemName || '') : 'поиск ATEM…'
 }
 
 function connectEvents() {

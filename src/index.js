@@ -4,7 +4,7 @@ import { loadConfig, saveConfig } from './config.js'
 import { TallyController } from './tallyController.js'
 import { FirmataOutput } from './output/firmataOutput.js'
 import { AtemSource } from './sources/atemSource.js'
-import { listInterfaces, hostsForSubnet, scan } from './sources/atemDiscovery.js'
+import { listInterfaces, hostsForSubnet, scan, chooseAtemIp } from './sources/atemDiscovery.js'
 import { createApp } from './sources/httpSource.js'
 import { diffRestartFields } from './diffRestartFields.js'
 import { withPins } from './lampPins.js'
@@ -159,6 +159,42 @@ export async function createServer(cfg, opts = {}) {
 
   // ── Server handle (for graceful HTTP shutdown) ───────────────────────────────
   let httpServer = null
+  let atemTimers = []
+  let discovering = false
+
+  // Discover ATEM ips across all local subnets (raw, ip-only scan).
+  async function discoverAtemIps() {
+    const ips = []
+    for (const iface of listInterfaces()) {
+      const found = await scan({ hosts: hostsForSubnet(iface.address, iface.netmask) })
+      for (const f of found) if (!ips.includes(f.ip)) ips.push(f.ip)
+    }
+    return ips
+  }
+
+  // Auto-connect: while the ATEM isn't connected, scan the network and connect
+  // to a discovered switcher (preferring the last-known ip). Lets the app work
+  // in any local network with no hand-edited ip; persists the working ip.
+  async function ensureAtem() {
+    if (!currentCfg.atem?.enabled || status.atem || discovering) return
+    discovering = true
+    try {
+      const found = await discoverAtemIps()
+      if (status.atem) return
+      const ip = chooseAtemIp(found, currentCfg.atem?.ip)
+      if (!ip) return
+      if (ip !== currentCfg.atem?.ip) {
+        currentCfg = { ...currentCfg, atem: { ...currentCfg.atem, ip } }
+        try { saveConfigImpl(configPath, currentCfg) } catch (e) { log.warn('persist atem ip failed:', e?.message || e) }
+      }
+      log.info(`ATEM auto-discovery → connecting ${ip}`)
+      await atemSource.reconnect(ip)
+    } catch (e) {
+      log.warn('ATEM auto-discovery failed:', e?.message || e)
+    } finally {
+      discovering = false
+    }
+  }
 
   return {
     app,
@@ -187,10 +223,17 @@ export async function createServer(cfg, opts = {}) {
         } catch (e) {
           log.error('ATEM start failed:', e?.message || e)
         }
+        // Fall back to network auto-discovery if the configured ip doesn't
+        // connect, and keep retrying while disconnected (new network / late power-on).
+        const t1 = setTimeout(ensureAtem, 5000); t1.unref?.()
+        const t2 = setInterval(ensureAtem, 15000); t2.unref?.()
+        atemTimers.push(t1, t2)
       }
     },
 
     async stop() {
+      for (const t of atemTimers) clearInterval(t)
+      atemTimers = []
       // Close HTTP server first so no new requests come in.
       if (httpServer) {
         await new Promise((resolve) => httpServer.close(resolve))

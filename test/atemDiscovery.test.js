@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { EventEmitter } from 'node:events'
-import { hostsForSubnet, scan } from '../src/sources/atemDiscovery.js'
+import { hostsForSubnet, scan, chooseAtemIp } from '../src/sources/atemDiscovery.js'
 
 describe('hostsForSubnet', () => {
   it('returns 254 hosts for a /24', () => {
@@ -34,5 +34,20 @@ describe('scan', () => {
     const socket = fakeSocket()
     const found = await scan({ hosts: ['192.168.10.5'], timeoutMs: 20, socketFactory: () => socket })
     expect(found).toEqual([])
+  })
+})
+
+describe('chooseAtemIp', () => {
+  it('prefers the last-known ip when it is among the found', () => {
+    expect(chooseAtemIp(['10.0.0.5', '10.0.0.9'], '10.0.0.9')).toBe('10.0.0.9')
+  })
+  it('falls back to the first found when preferred is absent', () => {
+    expect(chooseAtemIp(['10.0.0.5', '10.0.0.9'], '192.168.1.1')).toBe('10.0.0.5')
+  })
+  it('uses the first found when no preferred ip', () => {
+    expect(chooseAtemIp(['10.0.0.5'], undefined)).toBe('10.0.0.5')
+  })
+  it('returns null when nothing found', () => {
+    expect(chooseAtemIp([], '10.0.0.9')).toBe(null)
   })
 })

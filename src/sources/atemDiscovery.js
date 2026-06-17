@@ -57,3 +57,15 @@ export function scan({ hosts, timeoutMs = 1500, socketFactory } = {}) {
     }, timeoutMs)
   })
 }
+
+/**
+ * Pick which discovered ATEM to auto-connect to: the preferred (last-known) ip
+ * if it's among the found ones, otherwise the first found, or null if none.
+ * @param {string[]} found - discovered ip addresses
+ * @param {string} [preferred] - last-known/configured ip
+ * @returns {string|null}
+ */
+export function chooseAtemIp(found, preferred) {
+  if (preferred && found.includes(preferred)) return preferred
+  return found[0] || null
+}
