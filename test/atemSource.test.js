@@ -73,4 +73,31 @@ describe('AtemSource', () => {
     const src = new AtemSource({ ip: '1.2.3.4', atemFactory: () => atem })
     expect(src.getInputs()).toEqual([])
   })
+
+  it('getInfo reports connection, ip and switcher name', () => {
+    const atem = fakeAtem()
+    atem.state.info = { productIdentifier: 'ATEM Constellation' }
+    const src = new AtemSource({ ip: '1.2.3.4', atemFactory: () => atem })
+    expect(src.getInfo()).toEqual({ connected: false, ip: '1.2.3.4', name: 'ATEM Constellation' })
+  })
+
+  it('reconnect disconnects, updates ip, and connects to the new ip', async () => {
+    const atem = fakeAtem()
+    const src = new AtemSource({ ip: '1.1.1.1', atemFactory: () => atem })
+    src.start()
+    await src.reconnect('2.2.2.2')
+    expect(src.ip).toBe('2.2.2.2')
+    expect(atem.disconnect).toHaveBeenCalled()
+    expect(atem.connect).toHaveBeenCalledWith('2.2.2.2')
+  })
+
+  it('reconnect with empty ip disconnects without reconnecting', async () => {
+    const atem = fakeAtem()
+    const src = new AtemSource({ ip: '1.1.1.1', atemFactory: () => atem })
+    src.start()
+    atem.connect.mockClear()
+    await src.reconnect(null)
+    expect(atem.disconnect).toHaveBeenCalled()
+    expect(atem.connect).not.toHaveBeenCalled()
+  })
 })

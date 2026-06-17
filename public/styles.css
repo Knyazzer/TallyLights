@@ -12,6 +12,7 @@ section { background: #1d2026; border-radius: 8px; padding: 16px; }
 .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: #777; }
 .dot.on { background: #2ecc71; }
 .badge { padding: 2px 8px; border-radius: 4px; background: #3a3f49; }
+.atem-name { opacity: .8; font-size: 13px; margin-right: 10px; }
 button { background: #2d6cdf; color: #fff; border: 0; border-radius: 6px; padding: 8px 12px; cursor: pointer; }
 button.mode-btn.active { background: #2ecc71; }
 label { display: block; margin: 8px 0; }

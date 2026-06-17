@@ -30,6 +30,23 @@ async function listSerialPorts() {
   return SerialPort.list()
 }
 
+// Best-effort: briefly connect to an ATEM to read its product name, then drop.
+// Resolves null if it can't be read within timeoutMs. Used only by network scan.
+async function atemProductName(ip, timeoutMs = 2500) {
+  const { Atem } = await import('atem-connection')
+  const a = new Atem()
+  return new Promise((resolve) => {
+    let done = false
+    const finish = (name) => { if (done) return; done = true; try { a.disconnect() } catch { /* ignore */ } resolve(name) }
+    a.on('error', () => {})
+    const grab = () => { const n = a.state?.info?.productIdentifier; if (n) finish(n) }
+    a.on('connected', grab)
+    a.on('stateChanged', grab)
+    setTimeout(() => finish(null), timeoutMs)
+    try { a.connect(ip) } catch { finish(null) }
+  })
+}
+
 /**
  * Assemble the application from its modules.
  *
@@ -86,28 +103,37 @@ export async function createServer(cfg, opts = {}) {
     saveConfigFn: (next) => {
       // Persist + validate first (throws on invalid → HTTP layer maps to 422).
       saveConfigImpl(configPath, next)
-      // Hybrid hot-apply: the lamp map and onAtemDisconnect take effect live;
-      // comPort / baudRate / atem.ip / http.port require a restart.
+      // Hybrid hot-apply: lamp map, onAtemDisconnect AND the ATEM connection take
+      // effect live; comPort / baudRate / http.port require a restart.
       const restartFields = diffRestartFields(currentCfg, next)
       // Attach hardcoded pins by lamp id (UI only sends {id, atemInput}).
       const resolved = { ...next, lamps: next.lamps.map(withPins) }
       controller.setLamps(resolved.lamps)
       if (typeof output.setLamps === 'function') output.setLamps(resolved.lamps)
       controller.onAtemDisconnect = next.onAtemDisconnect
+      // Reconnect the ATEM live when its ip / enabled changed (no restart needed).
+      const atemChanged = next.atem?.ip !== currentCfg.atem?.ip || next.atem?.enabled !== currentCfg.atem?.enabled
       currentCfg = resolved
+      if (atemChanged && typeof atemSource.reconnect === 'function') {
+        Promise.resolve(atemSource.reconnect(next.atem?.enabled ? next.atem?.ip : null))
+          .catch(e => log.warn('atem reconnect failed:', e?.message || e))
+      }
       return { ...next, restartRequired: restartFields.length > 0, restartFields }
     },
     // listPorts: lazy import to avoid loading native serialport at module parse time
     listPorts: () => listSerialPorts(),
     scanAtem: async () => {
       const ifaces = listInterfaces()
-      const all = []
+      const found = []
       for (const iface of ifaces) {
         const hosts = hostsForSubnet(iface.address, iface.netmask)
-        const found = await scan({ hosts })
-        all.push(...found)
+        found.push(...await scan({ hosts }))
       }
-      return all
+      // Best-effort: read each switcher's product name so several ATEMs in the
+      // network can be told apart. Name is null if it can't be read in time.
+      const out = []
+      for (const d of found) out.push({ ip: d.ip, name: await atemProductName(d.ip).catch(() => null) })
+      return out
     },
     getAtemInputs: () => atemSource.getInputs(),
     testLamp: async (id, color) => {
@@ -128,7 +154,7 @@ export async function createServer(cfg, opts = {}) {
         output.render(controller.computeLampStates())
       }, testPulseMs)
     },
-    getStatus: () => ({ atem: status.atem, com: !!output.ready })
+    getStatus: () => ({ atem: status.atem, com: !!output.ready, atemName: atemSource.getInfo?.().name || null })
   })
 
   // ── Server handle (for graceful HTTP shutdown) ───────────────────────────────

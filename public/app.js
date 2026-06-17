@@ -4,6 +4,7 @@ const api = (url, opts) => fetch(url, opts).then(r => r.ok ? r.json() : Promise.
 let config = null
 let currentMode = ''
 let atemInputs = []
+let atemWasConnected = false
 
 function manualTallyPath(atemInput, state) {
   return '/' + state + '/' + atemInput
@@ -37,6 +38,19 @@ async function loadPorts() {
 
 async function loadAtemInputs() {
   try { atemInputs = await api('/api/atem/inputs') } catch { atemInputs = [] }
+}
+
+// Re-fetch ATEM inputs and refresh the dropdown options in place, keeping each
+// lamp's current selection. Called when the ATEM connects (inputs become known).
+async function refreshInputOptions() {
+  await loadAtemInputs()
+  document.querySelectorAll('#lamp-table tbody tr').forEach(tr => {
+    const sel = tr.querySelector('select.atem-input')
+    if (!sel) return
+    const current = sel.value
+    sel.innerHTML = buildInputSelect(Number(current)).innerHTML
+    sel.value = current
+  })
 }
 
 // ── Lamp map: fixed lamps (pins are hardcoded in the server), only the ATEM
@@ -168,6 +182,8 @@ function setMode(mode) {
 function setStatus(conn) {
   $('#st-atem').classList.toggle('on', !!conn?.atem)
   $('#st-com').classList.toggle('on', !!conn?.com)
+  const nameEl = $('#atem-name')
+  if (nameEl) nameEl.textContent = conn?.atem ? (conn.atemName || '') : ''
 }
 
 function connectEvents() {
@@ -176,7 +192,12 @@ function connectEvents() {
     const data = JSON.parse(e.data)
     if (data.mode) setMode(data.mode)
     if (data.lamps) renderLamps(data.lamps)
-    if (data.connections) setStatus(data.connections)
+    if (data.connections) {
+      setStatus(data.connections)
+      const nowConnected = !!data.connections.atem
+      if (nowConnected && !atemWasConnected) refreshInputOptions()
+      atemWasConnected = nowConnected
+    }
   }
 }
 
@@ -189,7 +210,7 @@ $('#scan').onclick = async () => {
   list.innerHTML = ''
   for (const a of found) {
     const li = document.createElement('li')
-    li.textContent = a.ip + (a.model ? ` (${a.model})` : '')
+    li.textContent = a.ip + (a.name ? ` — ${a.name}` : '')
     const pick = document.createElement('button')
     pick.textContent = 'выбрать'; pick.onclick = () => { $('#atemIp').value = a.ip }
     li.appendChild(pick); list.appendChild(li)

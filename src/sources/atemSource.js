@@ -46,6 +46,26 @@ export class AtemSource extends EventEmitter {
       .sort((a, b) => a.id - b.id)
   }
 
+  // Connection info for the admin: is it up, which ip, and the switcher's name.
+  getInfo() {
+    return {
+      connected: this.connected,
+      ip: this.ip,
+      name: this.atem?.state?.info?.productIdentifier || null
+    }
+  }
+
+  // Reconnect live to a new ip (or disconnect if ip is empty). Used when the
+  // admin picks/changes the ATEM without a server restart. Handlers attached in
+  // start() keep firing for the new connection.
+  async reconnect(ip) {
+    this.ip = ip
+    try { if (this.atem.disconnect) await this.atem.disconnect() } catch { /* ignore */ }
+    this.connected = false
+    this.emit('status', 'disconnected')
+    if (ip) this.atem.connect(ip)
+  }
+
   async stop() {
     if (this.atem.disconnect) await this.atem.disconnect()
   }

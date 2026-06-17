@@ -19,16 +19,16 @@ describe('diffRestartFields', () => {
     expect(diffRestartFields(base, next)).toContain('comPort')
   })
 
-  it('detects atem.ip change', () => {
+  it('does NOT require a restart for atem.ip change (hot-reconnected live)', () => {
     const next = { ...base, atem: { ...base.atem, ip: '10.0.0.1' } }
-    expect(diffRestartFields(base, next)).toContain('atem.ip')
+    expect(diffRestartFields(base, next)).toEqual([])
   })
 
-  it('detects comPort and atem.ip simultaneously', () => {
+  it('detects comPort but not atem.ip when both change', () => {
     const next = { ...base, comPort: 'COM5', atem: { ...base.atem, ip: '10.0.0.2' } }
     const result = diffRestartFields(base, next)
     expect(result).toContain('comPort')
-    expect(result).toContain('atem.ip')
+    expect(result).not.toContain('atem.ip')
   })
 
   it('returns [] when only lamps changed', () => {
