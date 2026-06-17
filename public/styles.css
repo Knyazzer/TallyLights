@@ -18,3 +18,12 @@ label { display: block; margin: 8px 0; }
 input, select { background: #14161a; color: #e6e6e6; border: 1px solid #3a3f49; border-radius: 4px; padding: 6px; }
 table { width: 100%; border-collapse: collapse; margin: 8px 0; }
 th, td { border: 1px solid #3a3f49; padding: 4px; text-align: center; }
+.manual-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.manual-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.manual-row span { min-width: 160px; }
+.btn-manual { background: #2d6cdf; }
+.btn-manual[data-state="program"] { background: #c0392b; }
+.btn-manual[data-state="preview"] { background: #1e7e34; }
+.btn-manual[data-state="off"] { background: #555; }
+.btn-manual.disabled, .btn-manual:disabled, button.disabled:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-test { background: #5a3ea0; padding: 4px 8px; font-size: 12px; margin-left: 4px; }

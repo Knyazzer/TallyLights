@@ -2,6 +2,11 @@ const $ = (sel) => document.querySelector(sel)
 const api = (url, opts) => fetch(url, opts).then(r => r.ok ? r.json() : Promise.reject(r))
 
 let config = null
+let currentMode = ''
+
+function manualTallyPath(atemInput, state) {
+  return '/' + state + '/' + atemInput
+}
 
 async function loadConfig() {
   config = await api('/api/config')
@@ -30,6 +35,7 @@ function renderLampTable() {
   const tbody = $('#lamp-table tbody')
   tbody.innerHTML = ''
   for (const l of (config.lamps || [])) addLampRow(l)
+  renderManualControls()
 }
 
 function addLampRow(l = { id: '', atemInput: '', previewPin: '', activePin: '' }) {
@@ -40,11 +46,20 @@ function addLampRow(l = { id: '', atemInput: '', previewPin: '', activePin: '' }
     inp.type = 'number'; inp.dataset.field = f; inp.value = l[f]
     td.appendChild(inp); tr.appendChild(td)
   }
-  const td = document.createElement('td')
+  const tdAct = document.createElement('td')
   const del = document.createElement('button')
   del.type = 'button'; del.textContent = '×'
   del.onclick = () => tr.remove()
-  td.appendChild(del); tr.appendChild(td)
+  tdAct.appendChild(del)
+  const testProg = document.createElement('button')
+  testProg.type = 'button'; testProg.textContent = 'Тест P'; testProg.className = 'btn-test'
+  testProg.onclick = () => api('/api/test/lamp/' + l.id + '?color=program', { method: 'POST' }).catch(() => {})
+  tdAct.appendChild(testProg)
+  const testPrev = document.createElement('button')
+  testPrev.type = 'button'; testPrev.textContent = 'Тест V'; testPrev.className = 'btn-test'
+  testPrev.onclick = () => api('/api/test/lamp/' + l.id + '?color=preview', { method: 'POST' }).catch(() => {})
+  tdAct.appendChild(testPrev)
+  tr.appendChild(tdAct)
   $('#lamp-table tbody').appendChild(tr)
 }
 
@@ -76,9 +91,44 @@ function renderLamps(lamps) {
   }
 }
 
+function renderManualControls() {
+  const section = $('#manual-controls')
+  if (!section) return
+  const list = section.querySelector('.manual-list')
+  list.innerHTML = ''
+  for (const l of (config.lamps || [])) {
+    const row = document.createElement('div')
+    row.className = 'manual-row'
+    const label = document.createElement('span')
+    label.textContent = 'Лампа ' + l.id + ' (вход ' + l.atemInput + ')'
+    row.appendChild(label)
+    for (const [state, text] of [['program', 'Program'], ['preview', 'Preview'], ['off', 'Off']]) {
+      const btn = document.createElement('button')
+      btn.type = 'button'; btn.textContent = text; btn.className = 'btn-manual'
+      btn.dataset.state = state; btn.dataset.input = l.atemInput
+      btn.onclick = () => api(manualTallyPath(l.atemInput, state), { method: 'POST' }).catch(() => {})
+      row.appendChild(btn)
+    }
+    list.appendChild(row)
+  }
+  updateManualButtonsState()
+}
+
+function updateManualButtonsState() {
+  const isManual = currentMode === 'manual'
+  document.querySelectorAll('.btn-manual').forEach(b => {
+    b.disabled = !isManual
+    b.classList.toggle('disabled', !isManual)
+  })
+  const clearBtn = $('#manual-clear')
+  if (clearBtn) { clearBtn.disabled = !isManual; clearBtn.classList.toggle('disabled', !isManual) }
+}
+
 function setMode(mode) {
+  currentMode = mode
   $('#mode-current').textContent = mode
   document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode))
+  updateManualButtonsState()
 }
 
 function setStatus(conn) {
@@ -118,5 +168,7 @@ $('#settings').onsubmit = async (e) => {
   try { await api('/api/config', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(collectConfig()) }); alert('Сохранено') }
   catch { alert('Ошибка валидации конфига') }
 }
+
+$('#manual-clear').onclick = () => api('/clear', { method: 'POST' }).catch(() => {})
 
 loadConfig().then(connectEvents)
