@@ -39,8 +39,12 @@ async function listSerialPorts() {
  * @param {string}   [opts.configPath]     - override config file path (tests)
  * @returns {Promise<{app, controller, output, atemSource, start(), stop()}>}
  */
+// Duration (ms) the test-lamp pulse stays lit before restoring real states.
+// Overridable via opts.testPulseMs for tests (avoids real 1 s timers).
+const DEFAULT_TEST_PULSE_MS = 1000
+
 export async function createServer(cfg, opts = {}) {
-  const { outputFactory, atemFactory, configPath = CONFIG_PATH, saveConfigImpl = saveConfig } = opts
+  const { outputFactory, atemFactory, configPath = CONFIG_PATH, saveConfigImpl = saveConfig, testPulseMs = DEFAULT_TEST_PULSE_MS } = opts
 
   // The currently running config. Reassigned on every successful save so that
   // getConfig() and restart-field diffs always compare against live state.
@@ -108,6 +112,7 @@ export async function createServer(cfg, opts = {}) {
         log.warn(`testLamp: unknown lamp id ${id}`)
         return
       }
+      // Momentary pulse: light the lamp for testPulseMs, then restore real states.
       output.render([{
         id,
         activePin: lamp.activePin,
@@ -115,6 +120,9 @@ export async function createServer(cfg, opts = {}) {
         program: color === 'program',
         preview: color === 'preview'
       }])
+      setTimeout(() => {
+        output.render(controller.computeLampStates())
+      }, testPulseMs)
     },
     getStatus: () => ({ atem: status.atem, com: !!output.ready })
   })

@@ -68,6 +68,11 @@ export class FirmataOutput {
   }
 
   setLamps(lamps) {
+    if (this.ready) {
+      // Drive ALL current (old) lamp pins LOW before swapping, so no pin stays
+      // physically lit after a live lamp-map edit removes it from the new map.
+      this.allOff()
+    }
     this.lamps = lamps
     if (!this.ready) return
     this.pinValues = new Map()  // clear diff cache so next render re-initializes

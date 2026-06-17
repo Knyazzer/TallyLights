@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import request from 'supertest'
 import { createServer } from '../src/index.js'
 
@@ -215,6 +215,48 @@ describe('createServer', () => {
     // controller.setLamps was also called
     expect(srv.controller.computeLampStates()).toHaveLength(1)
     expect(srv.controller.computeLampStates()[0].id).toBe(2)
+    await srv.stop()
+  })
+
+  it('testLamp restores lamp state after pulse (momentary, no latch)', async () => {
+    vi.useFakeTimers()
+    const rendered = []
+    const srv = await createServer(cfg, {
+      outputFactory: () => ({
+        connect: async () => {},
+        render: (states) => rendered.push(states),
+        allOff: () => {},
+        close: async () => {},
+        ready: true
+      }),
+      atemFactory: () => ({ on: () => {}, connect: () => {}, disconnect: async () => {}, state: {} }),
+      saveConfigImpl: () => {},
+      testPulseMs: 50  // tiny pulse so fake timers can advance it
+    })
+
+    // Hit the testLamp route for lamp id 1, color=program
+    await request(srv.app)
+      .post('/api/test/lamp/1?color=program')
+      .expect(200)
+
+    // After the request: first render should have the TEST illumination (program=true)
+    expect(rendered.length).toBeGreaterThanOrEqual(1)
+    const testRender = rendered[rendered.length - 1]
+    expect(testRender[0].program).toBe(true)
+
+    const countBeforePulse = rendered.length
+
+    // Advance timers past the pulse — should trigger restore render
+    vi.runAllTimers()
+
+    // A second render must have fired with the controller's actual current states
+    expect(rendered.length).toBeGreaterThan(countBeforePulse)
+    const restoreRender = rendered[rendered.length - 1]
+    // Lamp 1 is not live (no atem state), so it should be restored as OFF
+    expect(restoreRender[0].program).toBe(false)
+    expect(restoreRender[0].preview).toBe(false)
+
+    vi.useRealTimers()
     await srv.stop()
   })
 

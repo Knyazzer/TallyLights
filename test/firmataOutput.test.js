@@ -202,4 +202,22 @@ describe('FirmataOutput', () => {
     const out = new FirmataOutput({ comPort: 'COMX', baudRate: 57600, lamps })
     expect(() => out.setLamps([{ id: 3, atemInput: 3, previewPin: 8, activePin: 9 }])).not.toThrow()
   })
+
+  it('setLamps drives old pins LOW before swapping to new map', async () => {
+    // Fix 1: a pin driven HIGH under the OLD lamp map must be LOW-ed before the swap
+    const board = fakeBoard()
+    const out = makeOutput(board)
+    await out.connect()
+
+    // Drive lamp 1's activePin (3) HIGH via render
+    out.render([{ id: 1, activePin: 3, previewPin: 2, program: true, preview: false }])
+    board.calls.length = 0  // clear history; only care about setLamps calls
+
+    // Swap to a new map that does NOT include lamp 1's pins
+    const newLamps = [{ id: 3, atemInput: 3, previewPin: 8, activePin: 9 }]
+    out.setLamps(newLamps)
+
+    // OLD activePin 3 must have been driven LOW during setLamps
+    expect(board.calls).toContainEqual(['write', 3, 0])
+  })
 })
