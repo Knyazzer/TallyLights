@@ -67,6 +67,13 @@ export class FirmataOutput {
     for (const l of this.lamps) { this._write(l.activePin, LOW); this._write(l.previewPin, LOW) }
   }
 
+  setLamps(lamps) {
+    this.lamps = lamps
+    if (!this.ready) return
+    this.pinValues = new Map()  // clear diff cache so next render re-initializes
+    this._init()
+  }
+
   async close() {
     if (!this.board) return
     this.allOff()

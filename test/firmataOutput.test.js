@@ -175,4 +175,31 @@ describe('FirmataOutput', () => {
     await expect(out.close()).resolves.toBeUndefined()
     await expect(out.close()).resolves.toBeUndefined()
   })
+
+  it('setLamps after connect initializes new pins to OUTPUT and clears diff cache', async () => {
+    const board = fakeBoard()
+    const out = makeOutput(board)
+    await out.connect()
+    board.calls.length = 0   // clear connect-time calls
+
+    const newLamps = [
+      { id: 3, atemInput: 3, previewPin: 8, activePin: 9 }
+    ]
+    out.setLamps(newLamps)
+
+    // New pins must have been set to OUTPUT mode
+    const modeCalls = board.calls.filter(c => c[0] === 'mode').map(c => c[1])
+    expect(modeCalls).toContain(8)
+    expect(modeCalls).toContain(9)
+
+    // diff cache cleared: a render for the new lamp must actually write
+    board.calls.length = 0
+    out.render([{ id: 3, activePin: 9, previewPin: 8, program: true, preview: false }])
+    expect(board.calls).toContainEqual(['write', 9, 1])
+  })
+
+  it('setLamps is a safe no-op when not connected', () => {
+    const out = new FirmataOutput({ comPort: 'COMX', baudRate: 57600, lamps })
+    expect(() => out.setLamps([{ id: 3, atemInput: 3, previewPin: 8, activePin: 9 }])).not.toThrow()
+  })
 })
