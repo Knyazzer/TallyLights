@@ -1,15 +1,43 @@
-// NOTE: the serial transport is imported lazily (inside connect()) so that
-// tests can inject a fake board via boardFactory without loading native
-// bindings at module parse time.
+// NOTE: serialport@12 is imported lazily (inside connect()) so tests can inject
+// a fake board via boardFactory without loading native bindings at parse time.
 //
-// We open the port with serialport@12 (whose prebuilt bindings work on current
-// Node) and hand the open transport to firmata-io — bypassing the `firmata`
-// package's bundled legacy serialport, whose native bindings would otherwise
-// need a C++ toolchain to compile.
+// We drive the tally box with RAW Firmata bytes (SET_PIN_MODE + port-based
+// DIGITAL_MESSAGE) over an open serialport@12 transport. We deliberately do NOT
+// use the firmata/firmata-io handshake: the AVMATRIX TS3019 firmware accepts
+// pin commands but never sends a REPORT_VERSION reply, so firmata-io's strict
+// "ready" never fires. vMix drives the same box the same low-level way.
 
 const HIGH = 1
 const LOW = 0
 const OUTPUT = 1
+
+// Minimal Firmata writer over an open serial transport. Implements just the two
+// commands we need, with the same method names FirmataOutput expects from a board.
+export class RawFirmataBoard {
+  constructor(transport) {
+    this.transport = transport
+    this._ports = new Map() // port index -> current 8-pin value bitmask
+  }
+
+  // SET_PIN_MODE: 0xF4, pin, mode (OUTPUT = 1)
+  pinMode(pin, mode) {
+    this.transport.write(Buffer.from([0xF4, pin & 0x7F, mode & 0x7F]))
+  }
+
+  // DIGITAL_MESSAGE (port-based): 0x90|port, lsb(7 bits), msb(1 bit). We keep a
+  // running bitmask per 8-pin port so writing one pin preserves the others.
+  digitalWrite(pin, value) {
+    const port = pin >> 3
+    const bit = pin & 7
+    let mask = this._ports.get(port) || 0
+    if (value) mask |= (1 << bit)
+    else mask &= ~(1 << bit)
+    this._ports.set(port, mask)
+    this.transport.write(Buffer.from([0x90 | (port & 0x0F), mask & 0x7F, (mask >> 7) & 0x7F]))
+  }
+
+  on(event, cb) { this.transport.on(event, cb) }
+}
 
 export class FirmataOutput {
   constructor({ comPort, baudRate = 57600, lamps, boardFactory, readyTimeoutMs = 10000 } = {}) {
@@ -27,14 +55,16 @@ export class FirmataOutput {
     if (this._boardFactory) return this._boardFactory
     // Lazy import — only executed in production (real COM port) path.
     const { SerialPort } = await import('serialport')
-    const { default: FirmataIO } = await import('firmata-io')
-    const Firmata = FirmataIO.Firmata
-    // Open the port with serialport@12, then give the open transport to
-    // firmata-io. cb(err) on a pre-ready transport error, cb() once the board
-    // reports its firmware (ready) — matching the callback contract connect() expects.
     this._boardFactory = (port, opts, cb) => {
       const sp = new SerialPort({ path: port, baudRate: opts.baudRate })
-      return new Firmata(sp, {}, cb)
+      const board = new RawFirmataBoard(sp)
+      let settled = false
+      const finish = (err) => { if (!settled) { settled = true; cb(err) } }
+      sp.on('error', finish)
+      // No Firmata handshake (see top note). Ready once the port is open, plus a
+      // short settle in case the board resets on open so pin init lands reliably.
+      sp.on('open', () => setTimeout(() => finish(), 1000))
+      return board
     }
     return this._boardFactory
   }

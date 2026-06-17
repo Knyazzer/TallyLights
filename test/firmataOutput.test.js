@@ -1,5 +1,34 @@
 import { describe, it, expect, vi } from 'vitest'
-import { FirmataOutput } from '../src/output/firmataOutput.js'
+import { FirmataOutput, RawFirmataBoard } from '../src/output/firmataOutput.js'
+
+function fakeTransport() {
+  return { writes: [], write(b) { this.writes.push([...b]) }, on() {} }
+}
+
+describe('RawFirmataBoard', () => {
+  it('pinMode emits SET_PIN_MODE (0xF4 pin mode)', () => {
+    const t = fakeTransport()
+    new RawFirmataBoard(t).pinMode(3, 1)
+    expect(t.writes).toContainEqual([0xF4, 3, 1])
+  })
+
+  it('digitalWrite emits port-based DIGITAL_MESSAGE preserving other pins in the port', () => {
+    const t = fakeTransport()
+    const b = new RawFirmataBoard(t)
+    b.digitalWrite(3, 1) // port 0, bit 3 -> mask 0x08
+    expect(t.writes).toContainEqual([0x90, 0x08, 0x00])
+    b.digitalWrite(2, 1) // port 0, bit 2 added -> mask 0x0C (bit 3 preserved)
+    expect(t.writes).toContainEqual([0x90, 0x0C, 0x00])
+    b.digitalWrite(3, 0) // clear bit 3 -> mask 0x04
+    expect(t.writes).toContainEqual([0x90, 0x04, 0x00])
+  })
+
+  it('digitalWrite on pins 8-15 targets port 1', () => {
+    const t = fakeTransport()
+    new RawFirmataBoard(t).digitalWrite(13, 1) // 13>>3 = port 1, bit 5 -> mask 0x20
+    expect(t.writes).toContainEqual([0x91, 0x20, 0x00])
+  })
+})
 
 const lamps = [
   { id: 1, atemInput: 1, previewPin: 2, activePin: 3 },
