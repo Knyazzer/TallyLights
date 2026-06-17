@@ -17,11 +17,18 @@ Copy-Item (Join-Path $root 'public')              (Join-Path $stage 'public') -R
 Copy-Item (Join-Path $root 'config.example.json') $stage
 Copy-Item (Join-Path $root 'package.json')        $stage
 Copy-Item (Join-Path $root 'package-lock.json')   $stage
+Copy-Item (Join-Path $root 'launch-hidden.vbs')   $stage
+Copy-Item (Join-Path $PSScriptRoot 'app.ico')     $stage
 
 Write-Host '== Installing production dependencies =='
 Push-Location $stage
 try { npm ci --omit=dev --ignore-scripts --no-audit --no-fund; if ($LASTEXITCODE -ne 0) { throw "npm ci failed ($LASTEXITCODE)" } }
 finally { Pop-Location }
+
+Write-Host '== Trimming non-Windows tray binaries =='
+$traybin = Join-Path $stage 'node_modules\systray2\traybin'
+Remove-Item (Join-Path $traybin 'tray_darwin_release') -ErrorAction SilentlyContinue
+Remove-Item (Join-Path $traybin 'tray_linux_release')  -ErrorAction SilentlyContinue
 
 Write-Host '== Bundling Node runtime =='
 Copy-Item (Get-Command node).Source (Join-Path $stage 'node.exe')

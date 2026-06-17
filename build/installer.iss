@@ -17,7 +17,8 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 UninstallDisplayName={#MyAppName}
-UninstallDisplayIcon={app}\node.exe
+UninstallDisplayIcon={app}\app.ico
+SetupIconFile=app.ico
 OutputDir=..\dist
 OutputBaseFilename=TallyLightsSetup
 Compression=lzma2
@@ -35,9 +36,10 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "stage\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\node.exe"; Parameters: """src\index.js"""; WorkingDir: "{app}"; Comment: "Запустить TallyLights"
+; Launch via the hidden .vbs so there is no console window — the tray icon is the UI.
+Name: "{group}\{#MyAppName}"; Filename: "{app}\launch-hidden.vbs"; WorkingDir: "{app}"; IconFilename: "{app}\app.ico"; Comment: "Запустить TallyLights"
 Name: "{group}\Удалить {#MyAppName}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\node.exe"; Parameters: """src\index.js"""; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\launch-hidden.vbs"; WorkingDir: "{app}"; IconFilename: "{app}\app.ico"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\node.exe"; Parameters: """src\index.js"""; WorkingDir: "{app}"; Description: "Запустить TallyLights сейчас"; Flags: postinstall nowait skipifsilent
+Filename: "{app}\launch-hidden.vbs"; WorkingDir: "{app}"; Description: "Запустить TallyLights сейчас"; Flags: postinstall nowait skipifsilent shellexec

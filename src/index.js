@@ -260,6 +260,14 @@ export async function createServer(cfg, opts = {}) {
   }
 }
 
+// Open a url in the OS default browser (fire-and-forget).
+function openBrowser(url) {
+  import('node:child_process').then(({ spawn }) => {
+    if (process.platform === 'win32') spawn('cmd', ['/c', 'start', '', url], { detached: true, stdio: 'ignore' }).unref()
+    else spawn(process.platform === 'darwin' ? 'open' : 'xdg-open', [url], { detached: true, stdio: 'ignore' }).unref()
+  }).catch(() => { /* ignore */ })
+}
+
 // ── Entrypoint ──────────────────────────────────────────────────────────────
 // Only execute when this file is run directly (not when imported by tests).
 // pathToFileURL canonicalises argv[1] to the same form as import.meta.url on
@@ -270,26 +278,29 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const cfg = loadConfig(CONFIG_PATH, EXAMPLE_PATH)
   const srv = await createServer(cfg)
   await srv.start()
+  const url = `http://localhost:${cfg.http.port}`
 
-  // Open the admin UI in the default browser (disable with TALLY_NO_OPEN=1).
-  if (cfg.http.enabled && !process.env.TALLY_NO_OPEN) {
-    const url = `http://localhost:${cfg.http.port}`
-    try {
-      const { spawn } = await import('node:child_process')
-      if (process.platform === 'win32') spawn('cmd', ['/c', 'start', '', url], { detached: true, stdio: 'ignore' }).unref()
-      else spawn(process.platform === 'darwin' ? 'open' : 'xdg-open', [url], { detached: true, stdio: 'ignore' }).unref()
-    } catch { /* ignore */ }
-  }
-
+  let tray = null
   let shuttingDown = false
   const shutdown = async () => {
     if (shuttingDown) return
     shuttingDown = true
     log.info('shutting down…')
+    try { tray?.kill?.(false) } catch { /* ignore */ }
     await srv.stop()
     process.exit(0)
   }
-
   process.on('SIGINT', shutdown)
   process.on('SIGTERM', shutdown)
+
+  // Open the admin UI in the default browser (disable with TALLY_NO_OPEN=1).
+  if (cfg.http.enabled && !process.env.TALLY_NO_OPEN) openBrowser(url)
+
+  // System-tray icon on Windows: menu "Открыть админку / Выход" (TALLY_NO_TRAY=1 to disable).
+  if (process.platform === 'win32' && !process.env.TALLY_NO_TRAY) {
+    try {
+      const { startTray } = await import('./tray.js')
+      tray = await startTray({ openAdmin: () => openBrowser(url), quit: shutdown })
+    } catch (e) { log.warn('tray init failed:', e?.message || e) }
+  }
 }
