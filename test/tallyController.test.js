@@ -127,4 +127,19 @@ describe('TallyController', () => {
     const lamp1 = states.find(l => l.id === 1)
     expect(lamp1).toMatchObject({ id: 1, activePin: 3, previewPin: 2 })
   })
+
+  it('setLamps replaces lamp map and fires render', () => {
+    const c = make()                              // lamps: ids 1 & 2
+    const newLamps = [
+      { id: 3, atemInput: 3, previewPin: 6, activePin: 7 }
+    ]
+    const renderFired = vi.fn()
+    c.on('render', renderFired)
+    c.updateAtem({ program: [3], preview: [] })   // pre-seed atem state
+    c.setLamps(newLamps)
+    expect(renderFired).toHaveBeenCalled()
+    const states = c.computeLampStates()
+    expect(states).toHaveLength(1)
+    expect(states[0]).toMatchObject({ id: 3, program: true })
+  })
 })

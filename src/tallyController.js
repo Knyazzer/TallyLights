@@ -47,6 +47,11 @@ export class TallyController extends EventEmitter {
     if (this.mode === 'manual') this._render()
   }
 
+  setLamps(lamps) {
+    this.lamps = lamps
+    this._render()
+  }
+
   computeLampStates() {
     const { program, preview } = this._active()
     return this.lamps.map(l => {
