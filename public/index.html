@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TallyLights — Admin</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <h1>TallyLights</h1>
+    <div class="modes">
+      <span>Режим управления:</span>
+      <button data-mode="atem" class="mode-btn">ATEM</button>
+      <button data-mode="manual" class="mode-btn">Ручной</button>
+      <span id="mode-current" class="badge"></span>
+    </div>
+    <div class="status">
+      ATEM: <span id="st-atem" class="dot"></span>
+      COM: <span id="st-com" class="dot"></span>
+    </div>
+  </header>
+
+  <main>
+    <section>
+      <h2>Лампы</h2>
+      <div id="lamps" class="lamps"></div>
+    </section>
+
+    <section>
+      <h2>ATEM в сети</h2>
+      <button id="scan">Сканировать сеть</button>
+      <ul id="atem-list"></ul>
+    </section>
+
+    <section>
+      <h2>Настройки</h2>
+      <form id="settings">
+        <label>COM-порт
+          <select id="comPort"></select>
+        </label>
+        <label>Baud <input id="baudRate" type="number" /></label>
+        <label>ATEM IP <input id="atemIp" type="text" /></label>
+        <label>HTTP-порт <input id="httpPort" type="number" /></label>
+        <label>Режим по умолчанию
+          <select id="defaultMode"><option value="atem">atem</option><option value="manual">manual</option></select>
+        </label>
+        <label>При потере ATEM
+          <select id="onAtemDisconnect"><option value="hold">hold</option><option value="clear">clear</option></select>
+        </label>
+        <h3>Карта ламп</h3>
+        <table id="lamp-table">
+          <thead><tr><th>id</th><th>вход</th><th>previewPin</th><th>activePin</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <button type="button" id="add-lamp">+ лампа</button>
+        <button type="submit">Сохранить</button>
+      </form>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

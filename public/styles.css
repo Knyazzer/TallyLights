@@ -1,0 +1,20 @@
+* { box-sizing: border-box; }
+body { font-family: system-ui, sans-serif; margin: 0; background: #14161a; color: #e6e6e6; }
+header { padding: 16px; background: #1d2026; display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
+h1 { font-size: 18px; margin: 0; }
+main { padding: 16px; display: grid; gap: 24px; max-width: 920px; }
+section { background: #1d2026; border-radius: 8px; padding: 16px; }
+.lamps { display: flex; gap: 12px; flex-wrap: wrap; }
+.lamp { width: 90px; height: 90px; border-radius: 8px; display: flex; align-items: center;
+  justify-content: center; font-weight: bold; background: #2a2e36; border: 2px solid #3a3f49; }
+.lamp.program { background: #c0392b; border-color: #e74c3c; }
+.lamp.preview { background: #1e7e34; border-color: #2ecc71; }
+.dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: #777; }
+.dot.on { background: #2ecc71; }
+.badge { padding: 2px 8px; border-radius: 4px; background: #3a3f49; }
+button { background: #2d6cdf; color: #fff; border: 0; border-radius: 6px; padding: 8px 12px; cursor: pointer; }
+button.mode-btn.active { background: #2ecc71; }
+label { display: block; margin: 8px 0; }
+input, select { background: #14161a; color: #e6e6e6; border: 1px solid #3a3f49; border-radius: 4px; padding: 6px; }
+table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+th, td { border: 1px solid #3a3f49; padding: 4px; text-align: center; }
