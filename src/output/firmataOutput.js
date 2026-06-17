@@ -1,16 +1,22 @@
-// NOTE: 'firmata' is imported lazily (inside connect()) so that tests can
-// inject a fake board via boardFactory without triggering the serialport
-// native-binding load at module parse time.
+// NOTE: the serial transport is imported lazily (inside connect()) so that
+// tests can inject a fake board via boardFactory without loading native
+// bindings at module parse time.
+//
+// We open the port with serialport@12 (whose prebuilt bindings work on current
+// Node) and hand the open transport to firmata-io — bypassing the `firmata`
+// package's bundled legacy serialport, whose native bindings would otherwise
+// need a C++ toolchain to compile.
 
 const HIGH = 1
 const LOW = 0
 const OUTPUT = 1
 
 export class FirmataOutput {
-  constructor({ comPort, baudRate = 57600, lamps, boardFactory } = {}) {
+  constructor({ comPort, baudRate = 57600, lamps, boardFactory, readyTimeoutMs = 10000 } = {}) {
     this.comPort = comPort
     this.baudRate = baudRate
     this.lamps = lamps
+    this.readyTimeoutMs = readyTimeoutMs
     this._boardFactory = boardFactory || null // resolved lazily if null
     this.board = null
     this.ready = false
@@ -20,8 +26,16 @@ export class FirmataOutput {
   async _resolveFactory() {
     if (this._boardFactory) return this._boardFactory
     // Lazy import — only executed in production (real COM port) path.
-    const { default: Firmata } = await import('firmata')
-    this._boardFactory = (port, opts, cb) => new Firmata(port, opts, cb)
+    const { SerialPort } = await import('serialport')
+    const { default: FirmataIO } = await import('firmata-io')
+    const Firmata = FirmataIO.Firmata
+    // Open the port with serialport@12, then give the open transport to
+    // firmata-io. cb(err) on a pre-ready transport error, cb() once the board
+    // reports its firmware (ready) — matching the callback contract connect() expects.
+    this._boardFactory = (port, opts, cb) => {
+      const sp = new SerialPort({ path: port, baudRate: opts.baudRate })
+      return new Firmata(sp, {}, cb)
+    }
     return this._boardFactory
   }
 
@@ -30,15 +44,33 @@ export class FirmataOutput {
     this.pinValues = new Map()
     const factory = await this._resolveFactory()
     return new Promise((resolve, reject) => {
+      let settled = false
+      let timer = null
+      const finish = (fn, arg) => {
+        if (settled) return
+        settled = true
+        if (timer) clearTimeout(timer)
+        fn(arg)
+      }
+      // The port may open on a non-Firmata device (or wrong port); the board
+      // would then never report ready. Bound the wait so connect() always
+      // settles and the caller (e.g. server start) can proceed.
+      timer = setTimeout(() => {
+        this.ready = false
+        const b = this.board
+        this.board = null
+        try { b?.transport?.close?.() } catch { /* ignore */ }
+        finish(reject, new Error(`Firmata not ready on ${this.comPort} within ${this.readyTimeoutMs}ms`))
+      }, this.readyTimeoutMs)
       try {
         this.board = factory(this.comPort, { baudRate: this.baudRate }, (err) => {
-          if (err) return reject(err)
+          if (err) return finish(reject, err)
           this._init()
           this.ready = true
-          resolve()
+          finish(resolve)
         })
         this.board.on('error', () => { this.ready = false })
-      } catch (e) { reject(e) }
+      } catch (e) { finish(reject, e) }
     })
   }
 

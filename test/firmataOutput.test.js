@@ -85,6 +85,19 @@ describe('FirmataOutput', () => {
     expect(board.calls.filter(c => c[0] === 'write')).toEqual([])
   })
 
+  // connect() must settle (not hang) when the port opens but no Firmata
+  // firmware ever reports ready — otherwise server start would block forever.
+  it('connect rejects after readyTimeoutMs when board never becomes ready', async () => {
+    const board = fakeBoard()
+    const out = new FirmataOutput({
+      comPort: 'COMX', baudRate: 57600, lamps, readyTimeoutMs: 20,
+      boardFactory: () => board // factory never invokes cb → never ready
+    })
+    await expect(out.connect()).rejects.toThrow(/not ready/)
+    expect(out.ready).toBe(false)
+    expect(board.calls).toContainEqual(['close']) // port closed on timeout
+  })
+
   // Fix 1: close() asserts all 4 pins LOW
   it('close calls allOff and transport.close', async () => {
     const board = fakeBoard()

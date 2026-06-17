@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { loadConfig, saveConfig } from './config.js'
 import { TallyController } from './tallyController.js'
 import { FirmataOutput } from './output/firmataOutput.js'
@@ -137,28 +137,26 @@ export async function createServer(cfg, opts = {}) {
     atemSource,
 
     async start() {
-      // Connect to COM port; failure is logged but never crashes the process.
-      try {
-        await output.connect()
-      } catch (e) {
-        log.error('COM connect failed:', e?.message || e)
+      // Start HTTP first so the admin UI is reachable even when COM/ATEM are
+      // down — the operator can then fix the port/IP from the browser.
+      if (cfg.http.enabled) {
+        await new Promise((resolve) => {
+          httpServer = app.listen(cfg.http.port, resolve)
+        })
+        log.info(`HTTP on :${cfg.http.port}`)
       }
 
-      // Start ATEM polling only when enabled in config.
+      // Connect to the COM port in the background; a failure (wrong port or a
+      // non-Firmata device) is logged and must never block or crash startup.
+      output.connect().catch((e) => log.error('COM connect failed:', e?.message || e))
+
+      // Start ATEM polling only when enabled; a start error is logged, never fatal.
       if (cfg.atem.enabled) {
         try {
           atemSource.start()
         } catch (e) {
           log.error('ATEM start failed:', e?.message || e)
         }
-      }
-
-      // Start HTTP server when enabled.
-      if (cfg.http.enabled) {
-        await new Promise((resolve) => {
-          httpServer = app.listen(cfg.http.port, resolve)
-        })
-        log.info(`HTTP on :${cfg.http.port}`)
       }
     },
 
@@ -178,7 +176,10 @@ export async function createServer(cfg, opts = {}) {
 
 // ── Entrypoint ──────────────────────────────────────────────────────────────
 // Only execute when this file is run directly (not when imported by tests).
-if (import.meta.url === `file://${process.argv[1].replace(/\\/g, '/')}`) {
+// pathToFileURL canonicalises argv[1] to the same form as import.meta.url on
+// every platform (file:///C:/… on Windows, file:///… on POSIX) — a hand-built
+// `file://` + path string does NOT match on Windows (file:// vs file:///).
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const cfg = loadConfig(CONFIG_PATH, EXAMPLE_PATH)
   const srv = await createServer(cfg)
   await srv.start()
