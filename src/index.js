@@ -7,6 +7,7 @@ import { AtemSource } from './sources/atemSource.js'
 import { listInterfaces, hostsForSubnet, scan } from './sources/atemDiscovery.js'
 import { createApp } from './sources/httpSource.js'
 import { diffRestartFields } from './diffRestartFields.js'
+import { withPins } from './lampPins.js'
 import { log } from './logger.js'
 
 // NOTE: 'serialport' is NOT imported at the top level — its native bindings
@@ -88,10 +89,12 @@ export async function createServer(cfg, opts = {}) {
       // Hybrid hot-apply: the lamp map and onAtemDisconnect take effect live;
       // comPort / baudRate / atem.ip / http.port require a restart.
       const restartFields = diffRestartFields(currentCfg, next)
-      controller.setLamps(next.lamps)
-      if (typeof output.setLamps === 'function') output.setLamps(next.lamps)
+      // Attach hardcoded pins by lamp id (UI only sends {id, atemInput}).
+      const resolved = { ...next, lamps: next.lamps.map(withPins) }
+      controller.setLamps(resolved.lamps)
+      if (typeof output.setLamps === 'function') output.setLamps(resolved.lamps)
       controller.onAtemDisconnect = next.onAtemDisconnect
-      currentCfg = next
+      currentCfg = resolved
       return { ...next, restartRequired: restartFields.length > 0, restartFields }
     },
     // listPorts: lazy import to avoid loading native serialport at module parse time
@@ -106,6 +109,7 @@ export async function createServer(cfg, opts = {}) {
       }
       return all
     },
+    getAtemInputs: () => atemSource.getInputs(),
     testLamp: async (id, color) => {
       const lamp = currentCfg.lamps.find(l => l.id === id)
       if (!lamp) {

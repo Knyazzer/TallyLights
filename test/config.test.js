@@ -10,8 +10,8 @@ const valid = {
   http: { port: 8080, enabled: true },
   defaultMode: 'atem', onAtemDisconnect: 'hold',
   lamps: [
-    { id: 1, atemInput: 1, previewPin: 2, activePin: 3 },
-    { id: 2, atemInput: 2, previewPin: 4, activePin: 5 }
+    { id: 1, atemInput: 1 },
+    { id: 2, atemInput: 2 }
   ]
 }
 
@@ -27,19 +27,23 @@ describe('validateConfig', () => {
     const cfg = { ...valid, defaultMode: 'bogus' }
     expect(validateConfig(cfg).some(e => e.includes('defaultMode'))).toBe(true)
   })
-  it('rejects duplicate pins across lamps', () => {
-    const cfg = { ...valid, lamps: [
-      { id: 1, atemInput: 1, previewPin: 2, activePin: 3 },
-      { id: 2, atemInput: 2, previewPin: 3, activePin: 5 }
-    ] }
-    expect(validateConfig(cfg).some(e => e.includes('pin'))).toBe(true)
+  it('rejects an unknown lamp id (no hardcoded pin mapping)', () => {
+    const cfg = { ...valid, lamps: [{ id: 99, atemInput: 1 }] }
+    expect(validateConfig(cfg).some(e => e.includes('known lamp'))).toBe(true)
   })
   it('rejects duplicate lamp ids', () => {
     const cfg = { ...valid, lamps: [
-      { id: 1, atemInput: 1, previewPin: 2, activePin: 3 },
-      { id: 1, atemInput: 2, previewPin: 4, activePin: 5 }
+      { id: 1, atemInput: 1 },
+      { id: 1, atemInput: 2 }
     ] }
     expect(validateConfig(cfg).some(e => e.includes('id'))).toBe(true)
+  })
+  it('allows two lamps to follow the same atemInput', () => {
+    const cfg = { ...valid, lamps: [
+      { id: 1, atemInput: 5 },
+      { id: 2, atemInput: 5 }
+    ] }
+    expect(validateConfig(cfg)).toEqual([])
   })
 })
 
@@ -55,6 +59,8 @@ describe('loadConfig / saveConfig', () => {
     const cfg = loadConfig(target, example)
     expect(cfg.comPort).toBe('COM5')
     expect(fs.existsSync(target)).toBe(true)
+    // pins are not in the file — they are attached from the hardcoded map by id
+    expect(cfg.lamps[0]).toMatchObject({ id: 1, atemInput: 1, previewPin: 2, activePin: 3 })
   })
   it('saveConfig throws on invalid config', () => {
     const target = path.join(dir, 'config.json')

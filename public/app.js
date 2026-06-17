@@ -3,6 +3,7 @@ const api = (url, opts) => fetch(url, opts).then(r => r.ok ? r.json() : Promise.
 
 let config = null
 let currentMode = ''
+let atemInputs = []
 
 function manualTallyPath(atemInput, state) {
   return '/' + state + '/' + atemInput
@@ -16,7 +17,10 @@ async function loadConfig() {
   $('#defaultMode').value = config.defaultMode ?? 'atem'
   $('#onAtemDisconnect').value = config.onAtemDisconnect ?? 'hold'
   await loadPorts()
-  renderLampTable()
+  await loadAtemInputs()
+  renderLampMap()
+  renderManualControls()
+  renderLampTests()
 }
 
 async function loadPorts() {
@@ -31,44 +35,53 @@ async function loadPorts() {
   if (config.comPort) sel.value = config.comPort
 }
 
-function renderLampTable() {
-  const tbody = $('#lamp-table tbody')
-  tbody.innerHTML = ''
-  for (const l of (config.lamps || [])) addLampRow(l)
-  renderManualControls()
+async function loadAtemInputs() {
+  try { atemInputs = await api('/api/atem/inputs') } catch { atemInputs = [] }
 }
 
-function addLampRow(l = { id: '', atemInput: '', previewPin: '', activePin: '' }) {
-  const tr = document.createElement('tr')
-  for (const f of ['id', 'atemInput', 'previewPin', 'activePin']) {
-    const td = document.createElement('td')
-    const inp = document.createElement('input')
-    inp.type = 'number'; inp.dataset.field = f; inp.value = l[f]
-    td.appendChild(inp); tr.appendChild(td)
+// ── Lamp map: fixed lamps (pins are hardcoded in the server), only the ATEM
+// input is editable, chosen from a dropdown of the real switcher inputs. ──────
+function buildInputSelect(selected) {
+  const sel = document.createElement('select')
+  sel.className = 'atem-input'
+  const list = atemInputs.length ? atemInputs : [{ id: selected, name: 'вход ' + selected }]
+  let matched = false
+  for (const inp of list) {
+    const o = document.createElement('option')
+    o.value = inp.id; o.textContent = inp.id + ' — ' + inp.name
+    if (Number(inp.id) === Number(selected)) { o.selected = true; matched = true }
+    sel.appendChild(o)
   }
-  const tdAct = document.createElement('td')
-  const del = document.createElement('button')
-  del.type = 'button'; del.textContent = '×'
-  del.onclick = () => tr.remove()
-  tdAct.appendChild(del)
-  const testProg = document.createElement('button')
-  testProg.type = 'button'; testProg.textContent = 'Тест P'; testProg.className = 'btn-test'
-  testProg.onclick = () => api('/api/test/lamp/' + l.id + '?color=program', { method: 'POST' }).catch(() => {})
-  tdAct.appendChild(testProg)
-  const testPrev = document.createElement('button')
-  testPrev.type = 'button'; testPrev.textContent = 'Тест V'; testPrev.className = 'btn-test'
-  testPrev.onclick = () => api('/api/test/lamp/' + l.id + '?color=preview', { method: 'POST' }).catch(() => {})
-  tdAct.appendChild(testPrev)
-  tr.appendChild(tdAct)
-  $('#lamp-table tbody').appendChild(tr)
+  // Keep the saved value selectable even if the ATEM didn't report it (offline).
+  if (!matched && selected != null && selected !== '') {
+    const o = document.createElement('option')
+    o.value = selected; o.textContent = selected + ' — (текущий)'; o.selected = true
+    sel.appendChild(o)
+  }
+  return sel
+}
+
+function renderLampMap() {
+  const tbody = $('#lamp-table tbody')
+  tbody.innerHTML = ''
+  for (const l of (config.lamps || [])) {
+    const tr = document.createElement('tr')
+    tr.dataset.id = l.id
+    const tdId = document.createElement('td')
+    tdId.textContent = l.id
+    tr.appendChild(tdId)
+    const tdSel = document.createElement('td')
+    tdSel.appendChild(buildInputSelect(l.atemInput))
+    tr.appendChild(tdSel)
+    tbody.appendChild(tr)
+  }
 }
 
 function collectConfig() {
-  const lamps = [...document.querySelectorAll('#lamp-table tbody tr')].map(tr => {
-    const o = {}
-    tr.querySelectorAll('input').forEach(i => { o[i.dataset.field] = Number(i.value) })
-    return o
-  })
+  const lamps = [...document.querySelectorAll('#lamp-table tbody tr')].map(tr => ({
+    id: Number(tr.dataset.id),
+    atemInput: Number(tr.querySelector('select.atem-input').value)
+  }))
   return {
     comPort: $('#comPort').value,
     baudRate: Number($('#baudRate').value),
@@ -88,6 +101,27 @@ function renderLamps(lamps) {
     d.className = 'lamp' + (l.program ? ' program' : l.preview ? ' preview' : '')
     d.textContent = l.id
     box.appendChild(d)
+  }
+}
+
+// ── Lamp test: momentary pulse, works in any mode (for checking wiring). ──────
+function renderLampTests() {
+  const box = document.querySelector('#lamp-tests .test-list')
+  if (!box) return
+  box.innerHTML = ''
+  for (const l of (config.lamps || [])) {
+    const row = document.createElement('div')
+    row.className = 'manual-row'
+    const label = document.createElement('span')
+    label.textContent = 'Лампа ' + l.id
+    row.appendChild(label)
+    for (const [color, text] of [['program', 'Тест P'], ['preview', 'Тест V']]) {
+      const btn = document.createElement('button')
+      btn.type = 'button'; btn.textContent = text; btn.className = 'btn-test'
+      btn.onclick = () => api('/api/test/lamp/' + l.id + '?color=' + color, { method: 'POST' }).catch(() => {})
+      row.appendChild(btn)
+    }
+    box.appendChild(row)
   }
 }
 
@@ -162,7 +196,6 @@ $('#scan').onclick = async () => {
   }
   if (!found.length) list.innerHTML = '<li>не найдено</li>'
 }
-$('#add-lamp').onclick = () => addLampRow()
 $('#settings').onsubmit = async (e) => {
   e.preventDefault()
   try {

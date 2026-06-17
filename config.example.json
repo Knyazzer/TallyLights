@@ -6,11 +6,11 @@
   "defaultMode": "atem",
   "onAtemDisconnect": "hold",
   "lamps": [
-    { "id": 1, "atemInput": 1, "previewPin": 2, "activePin": 3 },
-    { "id": 2, "atemInput": 2, "previewPin": 4, "activePin": 5 },
-    { "id": 3, "atemInput": 3, "previewPin": 6, "activePin": 7 },
-    { "id": 4, "atemInput": 4, "previewPin": 8, "activePin": 9 },
-    { "id": 5, "atemInput": 5, "previewPin": 10, "activePin": 11 },
-    { "id": 6, "atemInput": 6, "previewPin": 12, "activePin": 13 }
+    { "id": 1, "atemInput": 1 },
+    { "id": 2, "atemInput": 2 },
+    { "id": 3, "atemInput": 3 },
+    { "id": 4, "atemInput": 4 },
+    { "id": 5, "atemInput": 5 },
+    { "id": 6, "atemInput": 6 }
   ]
 }

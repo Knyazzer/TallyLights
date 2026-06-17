@@ -47,10 +47,13 @@ npm start
 | `http.port` / `http.enabled` | Порт HTTP-сервера и включён ли он |
 | `defaultMode` | Режим при старте: `atem` или `manual` |
 | `onAtemDisconnect` | При потере ATEM: `hold` (держать) или `clear` (погасить) |
-| `lamps[]` | Карта ламп: `{ id, atemInput, previewPin, activePin }` |
+| `lamps[]` | Карта ламп: `{ id, atemInput }` — какая лампа за каким входом ATEM следит |
 
-**Пины** (`previewPin`/`activePin`) скопируйте из своей текущей настройки
-**vMix → Settings → Tally Lights** для этого же бокса — там это `PreviewPIN`/`ActivePIN`.
+**Пины ламп зашиты в коде** ([src/lampPins.js](src/lampPins.js)) под раскладку
+AVMATRIX TS3019-6 (лампа 1 → пины 2/3, лампа 2 → 4/5, … лампа 6 → 12/13) и в
+конфиге не хранятся. В админке у каждой лампы выбираешь только **вход ATEM** из
+выпадающего списка реальных входов пульта (с их названиями). Менять `atemInput`
+можно на лету — без перезапуска.
 
 `config.json` не хранится в git (только `config.example.json`). Файл создаётся из
 примера при первом запуске, если отсутствует.

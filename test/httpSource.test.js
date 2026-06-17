@@ -46,6 +46,19 @@ describe('httpSource', () => {
     expect(res.body).toEqual({ mode: 'atem' })
   })
 
+  it('GET /api/atem/inputs returns the injected ATEM input list', async () => {
+    const inputs = [{ id: 1, name: 'CAM 1' }, { id: 2, name: 'CAM 2' }]
+    const { app } = makeApp({ getAtemInputs: () => inputs })
+    const res = await request(app).get('/api/atem/inputs').expect(200)
+    expect(res.body).toEqual(inputs)
+  })
+
+  it('GET /api/atem/inputs returns [] when no provider wired', async () => {
+    const { app } = makeApp()
+    const res = await request(app).get('/api/atem/inputs').expect(200)
+    expect(res.body).toEqual([])
+  })
+
   // ── tally commands ─────────────────────────────────────────────────────────
   it('rejects tally commands when not in manual mode (409)', async () => {
     const { app } = makeApp()

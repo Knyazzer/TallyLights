@@ -50,4 +50,27 @@ describe('AtemSource', () => {
     src.start()
     expect(atem.connect).toHaveBeenCalledWith('9.9.9.9')
   })
+
+  it('getInputs returns camera inputs (id<1000) with names, sorted', () => {
+    const atem = fakeAtem()
+    atem.state.inputs = {
+      1: { longName: 'CAM Left' },
+      2: { shortName: 'C2' },
+      3: {},
+      1000: { longName: 'Black' },
+      2001: { longName: 'Bars' }
+    }
+    const src = new AtemSource({ ip: '1.2.3.4', atemFactory: () => atem })
+    expect(src.getInputs()).toEqual([
+      { id: 1, name: 'CAM Left' },
+      { id: 2, name: 'C2' },
+      { id: 3, name: 'Вход 3' }
+    ])
+  })
+
+  it('getInputs returns [] when no inputs in state', () => {
+    const atem = fakeAtem()
+    const src = new AtemSource({ ip: '1.2.3.4', atemFactory: () => atem })
+    expect(src.getInputs()).toEqual([])
+  })
 })

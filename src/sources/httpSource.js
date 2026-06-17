@@ -18,7 +18,7 @@ const PUBLIC_DIR = path.join(__dirname, '..', '..', 'public')
  * @param {() => {atem:boolean, com:boolean}} deps.getStatus
  * @returns {import('express').Express}
  */
-export function createApp({ controller, getConfig, saveConfigFn, listPorts, scanAtem, testLamp, getStatus }) {
+export function createApp({ controller, getConfig, saveConfigFn, listPorts, scanAtem, getAtemInputs, testLamp, getStatus }) {
   const app = express()
   app.use(express.json())
 
@@ -132,6 +132,14 @@ export function createApp({ controller, getConfig, saveConfigFn, listPorts, scan
     try {
       const devices = await scanAtem()
       res.json(devices)
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  })
+
+  app.get('/api/atem/inputs', (req, res) => {
+    try {
+      res.json(getAtemInputs ? getAtemInputs() : [])
     } catch (e) {
       res.status(500).json({ error: e.message })
     }

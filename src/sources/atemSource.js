@@ -36,6 +36,16 @@ export class AtemSource extends EventEmitter {
     this.emit('tally', extractTally(this.atem.state))
   }
 
+  // Real ATEM inputs as [{id, name}], cameras only (ids 1..999, excluding
+  // internal sources like Black/Bars/Color). Empty if the pult isn't connected.
+  getInputs() {
+    const inputs = this.atem?.state?.inputs || {}
+    return Object.entries(inputs)
+      .map(([k, i]) => ({ id: Number(k), name: (i && (i.longName || i.shortName)) || `Вход ${k}` }))
+      .filter(x => Number.isFinite(x.id) && x.id >= 1 && x.id < 1000)
+      .sort((a, b) => a.id - b.id)
+  }
+
   async stop() {
     if (this.atem.disconnect) await this.atem.disconnect()
   }

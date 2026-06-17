@@ -1,4 +1,5 @@
 ﻿import fs from 'node:fs'
+import { LAMP_PINS, withPins } from './lampPins.js'
 
 const VALID_MODES = ['atem', 'manual']
 const VALID_DISCONNECT = ['hold', 'clear']
@@ -16,19 +17,16 @@ export function validateConfig(cfg) {
     errors.push('lamps must be a non-empty array')
     return errors
   }
-  const ids = new Set(), inputs = new Set(), pins = new Set()
+  // Pins are no longer stored in config — they come from LAMP_PINS by lamp id.
+  // A lamp just needs a known id and a numeric atemInput. Multiple lamps may
+  // follow the same atemInput; only ids must be unique.
+  const ids = new Set()
   cfg.lamps.forEach((l, i) => {
-    for (const f of ['id', 'atemInput', 'previewPin', 'activePin']) {
-      if (typeof l[f] !== 'number') errors.push(`lamp[${i}].${f} must be a number`)
-    }
+    if (typeof l.id !== 'number') errors.push(`lamp[${i}].id must be a number`)
+    else if (!LAMP_PINS[l.id]) errors.push(`lamp[${i}].id ${l.id} is not a known lamp (valid: ${Object.keys(LAMP_PINS).join(', ')})`)
+    if (typeof l.atemInput !== 'number') errors.push(`lamp[${i}].atemInput must be a number`)
     if (ids.has(l.id)) errors.push(`duplicate lamp id ${l.id}`)
     ids.add(l.id)
-    if (inputs.has(l.atemInput)) errors.push(`duplicate atemInput ${l.atemInput}`)
-    inputs.add(l.atemInput)
-    for (const p of [l.previewPin, l.activePin]) {
-      if (pins.has(p)) errors.push(`duplicate pin ${p}`)
-      pins.add(p)
-    }
   })
   return errors
 }
@@ -38,12 +36,15 @@ export function loadConfig(configPath, examplePath) {
   const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'))
   const errors = validateConfig(cfg)
   if (errors.length) throw new Error('Invalid config:\n' + errors.join('\n'))
+  cfg.lamps = cfg.lamps.map(withPins) // attach hardcoded pins for the app to use
   return cfg
 }
 
 export function saveConfig(configPath, cfg) {
   const errors = validateConfig(cfg)
   if (errors.length) throw new Error('Invalid config:\n' + errors.join('\n'))
-  fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2))
-  return cfg
+  // Persist only {id, atemInput} per lamp — pins live in code, not on disk.
+  const onDisk = { ...cfg, lamps: cfg.lamps.map(l => ({ id: l.id, atemInput: l.atemInput })) }
+  fs.writeFileSync(configPath, JSON.stringify(onDisk, null, 2))
+  return onDisk
 }
