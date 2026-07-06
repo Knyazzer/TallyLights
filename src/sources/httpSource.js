@@ -22,6 +22,12 @@ export function createApp({ controller, getConfig, saveConfigFn, listPorts, scan
   const app = express()
   app.use(express.json())
 
+  // ── KomusWatchdog: счётчик запросов + /health (+/routes) для мониторинга ──────
+  let requestCount = 0
+  app.use((req, _res, next) => { if (req.url !== '/health') requestCount++; next() })
+  app.get('/health', (_req, res) => res.json({ ok: true, requests: requestCount }))
+  app.get('/routes', (_req, res) => res.json([{ path: '/', label: 'Админка Tally' }]))
+
   // ── mode ────────────────────────────────────────────────────────────────────
   app.post('/mode/:mode', (req, res) => {
     try {

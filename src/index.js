@@ -276,6 +276,8 @@ function openBrowser(url) {
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   fs.mkdirSync(DATA_DIR, { recursive: true })
   const cfg = loadConfig(CONFIG_PATH, EXAMPLE_PATH)
+  // KomusWatchdog: порт из INTERACTIVE_PORT (приоритетнее config.json)
+  if (process.env.INTERACTIVE_PORT) cfg.http.port = Number(process.env.INTERACTIVE_PORT)
   const srv = await createServer(cfg)
   await srv.start()
   const url = `http://localhost:${cfg.http.port}`
@@ -294,10 +296,12 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   process.on('SIGTERM', shutdown)
 
   // Open the admin UI in the default browser (disable with TALLY_NO_OPEN=1).
-  if (cfg.http.enabled && !process.env.TALLY_NO_OPEN) openBrowser(url)
+  // При запуске из KomusWatchdog (INTERACTIVE_PORT) — не открывать браузер.
+  if (cfg.http.enabled && !process.env.TALLY_NO_OPEN && !process.env.INTERACTIVE_PORT) openBrowser(url)
 
   // System-tray icon on Windows: menu "Открыть админку / Выход" (TALLY_NO_TRAY=1 to disable).
-  if (process.platform === 'win32' && !process.env.TALLY_NO_TRAY) {
+  // При запуске из KomusWatchdog (INTERACTIVE_PORT) — без трея.
+  if (process.platform === 'win32' && !process.env.TALLY_NO_TRAY && !process.env.INTERACTIVE_PORT) {
     try {
       const { startTray } = await import('./tray.js')
       tray = await startTray({ openAdmin: () => openBrowser(url), quit: shutdown })
