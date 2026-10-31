@@ -43,13 +43,18 @@ export function hostsForSubnet(address, netmask) {
 export function scan({ hosts, timeoutMs = 1500, socketFactory } = {}) {
   return new Promise((resolve) => {
     const found = new Map()
+    const candidates = new Set(hosts)
     const socket = (socketFactory || (() => dgram.createSocket('udp4')))()
     socket.on('message', (msg, rinfo) => {
+      // Validate ATEM's packet length and NewSessionId flag, rather than
+      // treating any stray UDP response as a switcher.
+      if (rinfo.port !== ATEM_PORT || !candidates.has(rinfo.address) || msg.length < 12 ||
+          (msg.readUInt16BE(0) & 0x07FF) !== msg.length || !(msg[0] & 0x10)) return
       if (!found.has(rinfo.address)) found.set(rinfo.address, { ip: rinfo.address })
     })
     socket.on('error', () => {})
     socket.bind(() => {
-      for (const ip of hosts) socket.send(HELLO, 0, HELLO.length, ATEM_PORT, ip)
+      for (const ip of hosts) socket.send(HELLO, 0, HELLO.length, ATEM_PORT, ip, () => {})
     })
     setTimeout(() => {
       try { socket.close() } catch { /* ignore */ }

@@ -11,6 +11,7 @@ logs/
 # Build / dist (keep build scripts, ignore staged payload + output)
 dist/
 build/stage/
+build/visual-preview/
 
 # OS / editor
 .DS_Store

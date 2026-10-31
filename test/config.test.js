@@ -2,7 +2,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { validateConfig, loadConfig, saveConfig } from '../src/config.js'
+import { validateConfig, loadConfig, saveConfig, normalizeConfig } from '../src/config.js'
 
 const valid = {
   comPort: 'COM5', baudRate: 57600,
@@ -16,6 +16,18 @@ const valid = {
 }
 
 describe('validateConfig', () => {
+  it('migrates old startup modes and defaults missing disconnect policy to clear', () => {
+    const cfg = normalizeConfig({ ...valid, defaultMode: 'manual', onAtemDisconnect: undefined })
+    expect(cfg).not.toHaveProperty('defaultMode')
+    expect(cfg.onAtemDisconnect).toBe('clear')
+    expect(cfg.atem.me).toBe(1)
+    expect(normalizeConfig(valid).onAtemDisconnect).toBe('hold')
+  })
+  it('rejects malformed nested fields, null lamps and fractional input ids', () => {
+    for (const cfg of [{ ...valid, http: null }, { ...valid, atem: { ip: 'abc' } },
+      { ...valid, lamps: [null] }, { ...valid, lamps: [{ id: 1, atemInput: 1.5 }] }])
+      expect(validateConfig(cfg).length).toBeGreaterThan(0)
+  })
   it('accepts a valid config', () => {
     expect(validateConfig(valid)).toEqual([])
   })
@@ -23,9 +35,9 @@ describe('validateConfig', () => {
     const cfg = { ...valid, comPort: '' }
     expect(validateConfig(cfg).some(e => e.includes('comPort'))).toBe(true)
   })
-  it('rejects invalid defaultMode', () => {
-    const cfg = { ...valid, defaultMode: 'bogus' }
-    expect(validateConfig(cfg).some(e => e.includes('defaultMode'))).toBe(true)
+  it('rejects invalid baudRate', () => {
+    const cfg = { ...valid, baudRate: 0 }
+    expect(validateConfig(cfg).some(e => e.includes('baudRate'))).toBe(true)
   })
   it('rejects an unknown lamp id (no hardcoded pin mapping)', () => {
     const cfg = { ...valid, lamps: [{ id: 99, atemInput: 1 }] }
@@ -64,11 +76,14 @@ describe('loadConfig / saveConfig', () => {
   })
   it('saveConfig throws on invalid config', () => {
     const target = path.join(dir, 'config.json')
-    expect(() => saveConfig(target, { ...valid, defaultMode: 'x' })).toThrow()
+    expect(() => saveConfig(target, { ...valid, baudRate: 0 })).toThrow()
   })
   it('saveConfig writes valid config', () => {
     const target = path.join(dir, 'config.json')
     saveConfig(target, valid)
-    expect(JSON.parse(fs.readFileSync(target, 'utf8')).comPort).toBe('COM5')
+    const saved = JSON.parse(fs.readFileSync(target, 'utf8'))
+    expect(saved.comPort).toBe('COM5')
+    expect(saved).not.toHaveProperty('defaultMode')
+    expect(saved.lamps[0]).not.toHaveProperty('activePin')
   })
 })

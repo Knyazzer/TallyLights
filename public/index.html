@@ -1,74 +1,100 @@
 <!doctype html>
 <html lang="ru">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>TallyLights — Admin</title>
-  <link rel="stylesheet" href="styles.css" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TallyLights Software Control</title>
+  <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <header>
-    <h1>TallyLights</h1>
-    <div class="modes">
-      <span>Режим управления:</span>
-      <button data-mode="atem" class="mode-btn">ATEM</button>
-      <button data-mode="manual" class="mode-btn">Ручной</button>
-      <span id="mode-current" class="badge"></span>
-    </div>
-    <div class="status">
-      ATEM: <span id="st-atem" class="dot"></span> <span id="atem-name" class="atem-name"></span>
-      COM: <span id="st-com" class="dot"></span>
-    </div>
+<div class="app-shell">
+  <header class="app-header">
+    <h1>TallyLights <span>Software Control</span></h1>
+    <span class="product-link">BLACKMAGIC ATEM / AVMATRIX</span>
   </header>
-
-  <main>
-    <section>
-      <h2>Лампы</h2>
-      <div id="lamps" class="lamps"></div>
-    </section>
-
-    <section id="lamp-tests">
-      <h2>Тест ламп</h2>
-      <div class="test-list"></div>
-    </section>
-
-    <section id="manual-controls">
-      <h2>Ручное управление</h2>
-      <div class="manual-list"></div>
-      <button type="button" id="manual-clear" class="disabled" disabled>Очистить</button>
-    </section>
-
-    <section>
-      <h2>ATEM в сети</h2>
-      <button id="scan">Сканировать сеть</button>
-      <ul id="atem-list"></ul>
-    </section>
-
-    <section>
-      <h2>Настройки</h2>
-      <form id="settings">
-        <label>COM-порт
-          <select id="comPort"></select>
-        </label>
-        <label>Baud <input id="baudRate" type="number" /></label>
-        <label>ATEM IP <input id="atemIp" type="text" /></label>
-        <label>HTTP-порт <input id="httpPort" type="number" /></label>
-        <label>Режим по умолчанию
-          <select id="defaultMode"><option value="atem">atem</option><option value="manual">manual</option></select>
-        </label>
-        <label>При потере ATEM
-          <select id="onAtemDisconnect"><option value="hold">hold</option><option value="clear">clear</option></select>
-        </label>
-        <h3>Карта ламп</h3>
-        <table id="lamp-table">
-          <thead><tr><th>Лампа</th><th>Вход ATEM</th></tr></thead>
-          <tbody></tbody>
-        </table>
-        <button type="submit">Сохранить</button>
-      </form>
-    </section>
-  </main>
-
-  <script src="app.js"></script>
+  <div class="workspace">
+    <div class="main-column">
+      <section class="monitor console-panel" aria-label="Состояние ламп">
+        <h2 class="eyebrow">Tally Monitor</h2>
+        <div class="bus-label">Program</div>
+        <div id="program-lamps" class="key-bank" aria-label="Program"></div>
+        <div class="bus-label preview-label">Preview</div>
+        <div id="preview-lamps" class="key-bank" aria-label="Preview"></div>
+      </section>
+      <main class="console-panel editor">
+        <section id="settings" class="page" hidden>
+          <div class="settings-columns">
+            <article>
+              <h2 class="section-title">Подключение к ATEM</h2>
+              <p>Найдите пульт в сети или укажите IP.</p>
+              <button id="scan">Сканировать сеть</button>
+              <div id="devices" class="device-well" aria-live="polite"></div>
+              <form id="atem-form">
+                <label for="atem-ip">IP-адрес пульта</label>
+                <div class="inline-fields"><input id="atem-ip" placeholder="192.168.10.240" autocomplete="off"><button type="submit">Подключить</button></div>
+                <p class="hint">Пустой IP — автоматический поиск.</p>
+              </form>
+              <label for="atem-me">M/E для Tally</label>
+              <select id="atem-me" disabled><option value="1">M/E 1</option></select>
+            </article>
+            <article>
+              <h2 class="section-title">Подключение к Tally</h2>
+              <p>USB переподключается автоматически.</p>
+              <form id="serial-form">
+                <label class="sr-only" for="com-port">COM-порт</label>
+                <select id="com-port"><option value="auto">Автоматически · AVMATRIX / CH340</option></select>
+                <div class="button-row"><button id="refresh-ports" type="button">Обновить порты</button></div>
+                <label for="baud-rate">Скорость COM-порта, бод</label>
+                <input id="baud-rate" type="number" value="57600" min="300" max="1000000">
+                <div class="button-row"><button type="submit">Применить</button></div>
+              </form>
+              <p class="hint">Порт открыт — команды отправляются. Получение сигнала боксом проверьте во вкладке «Тесты».</p>
+              <label for="disconnect">При потере ATEM</label>
+              <select id="disconnect">
+                <option value="clear">Clear · погасить лампы</option>
+                <option value="hold">Hold · оставить последнее состояние</option>
+              </select>
+            </article>
+          </div>
+        </section>
+        <section id="mapping" class="page">
+          <h2 class="section-title">Назначение входов ATEM</h2>
+          <p>Маппинг сохраняется и применяется при выборе входа.</p>
+          <div id="mapping-list"></div>
+        </section>
+        <section id="tests" class="page" hidden>
+          <h2 class="section-title">Тестовые сигналы</h2>
+          <div id="test-list"></div>
+        </section>
+      </main>
+    </div>
+    <aside class="palette console-panel" aria-label="Мониторинг подключений">
+      <div class="palette-tab">Подключения</div>
+      <section>
+        <h2 class="section-title">Blackmagic ATEM</h2>
+        <div class="connection"><span class="dot" id="atem-dot"></span><span id="atem-status">Поиск пульта…</span></div>
+        <p class="caption" id="atem-me-status"></p>
+      </section>
+      <section>
+        <h2 class="section-title">AVMATRIX Tally</h2>
+        <div class="connection"><span class="dot" id="com-dot"></span><span id="com-status">Поиск устройства…</span></div>
+        <p class="caption">USB / COM · Firmata</p>
+      </section>
+    </aside>
+  </div>
+  <nav class="bottom-navigation" aria-label="Разделы">
+    <button class="tab" data-tab="settings" aria-pressed="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><path d="M12 1v3m0 16v3M1 12h3m16 0h3M4 4l2 2m12 12 2 2M4 20l2-2M18 6l2-2"/></svg>Настройки
+    </button>
+    <button class="tab active" data-tab="mapping" aria-pressed="true">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6v5H9zm3 5v5M3 12h18M3 12v4m9-4v4m9-4v4M1 16h5v5H1zm8.5 0h5v5h-5zm8.5 0h5v5h-5z"/></svg>Маппинг
+    </button>
+    <button class="tab" data-tab="tests" aria-pressed="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 4h20v16H2zM5 12h4l2-5 3 10 2-5h3"/></svg>Тесты
+    </button>
+  </nav>
+  <footer id="notice" role="status" aria-live="polite">Подключение к серверу…</footer>
+</div>
+<script type="module" src="/app.js"></script>
 </body>
 </html>

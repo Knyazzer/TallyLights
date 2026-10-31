@@ -1,16 +1,40 @@
 {
-  "comPort": "COM5",
+  "comPort": "auto",
   "baudRate": 57600,
-  "atem": { "ip": "192.168.10.240", "enabled": true },
-  "http": { "port": 8080, "enabled": true },
-  "defaultMode": "atem",
-  "onAtemDisconnect": "hold",
+  "atem": {
+    "ip": "",
+    "enabled": true,
+    "me": 1
+  },
+  "http": {
+    "port": 8080,
+    "enabled": true
+  },
+  "onAtemDisconnect": "clear",
   "lamps": [
-    { "id": 1, "atemInput": 1 },
-    { "id": 2, "atemInput": 2 },
-    { "id": 3, "atemInput": 3 },
-    { "id": 4, "atemInput": 4 },
-    { "id": 5, "atemInput": 5 },
-    { "id": 6, "atemInput": 6 }
+    {
+      "id": 1,
+      "atemInput": 1
+    },
+    {
+      "id": 2,
+      "atemInput": 2
+    },
+    {
+      "id": 3,
+      "atemInput": 3
+    },
+    {
+      "id": 4,
+      "atemInput": 4
+    },
+    {
+      "id": 5,
+      "atemInput": 5
+    },
+    {
+      "id": 6,
+      "atemInput": 6
+    }
   ]
 }

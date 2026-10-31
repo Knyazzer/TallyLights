@@ -1,20 +1,20 @@
 {
   "name": "tallylights",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "ATEM/Companion -> AVMATRIX TS3019-6 tally bridge over COM (Firmata)",
+  "description": "Blackmagic ATEM to AVMATRIX TS3019-6 tally bridge",
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "test": "vitest run",
-    "build:installer": "powershell -ExecutionPolicy Bypass -File build/build-installer.ps1"
+    "build:installer": "powershell -ExecutionPolicy Bypass -File build/build-installer.ps1",
+    "build:desktop": "powershell -ExecutionPolicy Bypass -File build/build-desktop.ps1"
   },
   "dependencies": {
     "atem-connection": "^3.9.0",
     "express": "^4.19.2",
-    "serialport": "^12.0.0",
-    "systray2": "^2.1.4"
+    "serialport": "^12.0.0"
   },
   "devDependencies": {
     "supertest": "^7.0.0",

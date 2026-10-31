@@ -21,10 +21,20 @@ function fakeSocket() {
 }
 
 describe('scan', () => {
+  it('ignores unrelated UDP senders and malformed packets', async () => {
+    const socket = fakeSocket()
+    const p = scan({ hosts: ['10.0.0.2'], timeoutMs: 10, socketFactory: () => socket })
+    const reply = Buffer.alloc(20); reply[0] = 0x10; reply[1] = 20
+    socket.emit('message', reply, { address: '10.0.0.3', port: 9910 })
+    socket.emit('message', reply, { address: '10.0.0.2', port: 1234 })
+    socket.emit('message', Buffer.from([0x10]), { address: '10.0.0.2', port: 9910 })
+    expect(await p).toEqual([])
+  })
   it('collects IPs that respond on port 9910', async () => {
     const socket = fakeSocket()
     const p = scan({ hosts: ['192.168.10.240', '192.168.10.5'], timeoutMs: 20, socketFactory: () => socket })
-    socket.emit('message', Buffer.from([0x10]), { address: '192.168.10.240', port: 9910 })
+    const reply = Buffer.alloc(20); reply[0] = 0x10; reply[1] = 20
+    socket.emit('message', reply, { address: '192.168.10.240', port: 9910 })
     const found = await p
     expect(found).toEqual([{ ip: '192.168.10.240' }])
     expect(socket.sent.map(s => s.port)).toEqual([9910, 9910])

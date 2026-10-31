@@ -1,232 +1,171 @@
-const $ = (sel) => document.querySelector(sel)
-const api = (url, opts) => fetch(url, opts).then(r => r.ok ? r.json() : Promise.reject(r))
-
-let config = null
-let currentMode = ''
-let atemInputs = []
-let atemWasConnected = false
-
-function manualTallyPath(atemInput, state) {
-  return '/' + state + '/' + atemInput
+import { mountSelects, releaseSelects } from './select.js'
+const $ = s => document.querySelector(s)
+let config, inputs = [], signature = '', connected = false, streamLive = false, meSignature = ''
+function notice(message, error = false) { $('#notice').textContent = message; $('#notice').classList.toggle('error', error) }
+async function api(url, data, method = 'GET') {
+  const res = await fetch(url, { method, headers: data ? { 'Content-Type': 'application/json' } : {}, body: data ? JSON.stringify(data) : undefined })
+  const value = await res.json()
+  if (!res.ok) throw new Error(value.error || 'Ошибка запроса')
+  return value
 }
-
-async function loadConfig() {
-  config = await api('/api/config')
-  $('#baudRate').value = config.baudRate ?? 57600
-  $('#atemIp').value = config.atem?.ip ?? ''
-  $('#httpPort').value = config.http?.port ?? 8080
-  $('#defaultMode').value = config.defaultMode ?? 'atem'
-  $('#onAtemDisconnect').value = config.onAtemDisconnect ?? 'hold'
-  await loadPorts()
-  await loadAtemInputs()
-  renderLampMap()
-  renderManualControls()
-  renderLampTests()
+async function action(button, fn) {
+  button.disabled = true
+  try { await fn() } catch (e) { notice(e.message, true) }
+  finally { if (button.id !== 'atem-me') button.disabled = button.classList.contains('test-key') && !connected }
 }
-
+async function save(patch) {
+  config = await api('/api/config', patch, 'PATCH')
+  notice('Сохранено и применено')
+}
+function option(value, text) { const o = document.createElement('option'); o.value = value; o.textContent = text; return o }
 async function loadPorts() {
+  const selected = $('#com-port').value || config.comPort
   const ports = await api('/api/ports')
-  const sel = $('#comPort')
-  sel.innerHTML = ''
-  for (const p of ports) {
-    const o = document.createElement('option')
-    o.value = p.path; o.textContent = p.path
-    sel.appendChild(o)
+  $('#com-port').replaceChildren(option('auto', 'Автоматически · AVMATRIX / CH340'))
+  for (const p of ports) $('#com-port').append(option(p.path, p.path + ' · ' + (p.manufacturer || 'USB Serial')))
+  if (selected !== 'auto' && !ports.some(p => p.path === selected)) $('#com-port').append(option(selected, selected + ' · сейчас отсутствует'))
+  $('#com-port').value = selected
+}
+function mapping(focusId) {
+  const list = $('#mapping-list')
+  const focused = focusId || document.activeElement?.closest('.select-shell')?.dataset.selectId
+  releaseSelects(list)
+  list.replaceChildren()
+  for (const l of config.lamps) {
+    const row = document.createElement('div'); row.className = 'mapping-row'
+    const label = document.createElement('label'); label.textContent = 'Tally ' + l.id; label.htmlFor = 'map-' + l.id
+    const select = document.createElement('select'); select.id = label.htmlFor
+    select.append(option(0, 'Не назначено'))
+    for (const input of inputs) select.append(option(input.id, input.id + ' · ' + input.name))
+    if (l.atemInput && !inputs.some(i => i.id === l.atemInput)) select.append(option(l.atemInput, 'Вход ' + l.atemInput + ' · сохранённый'))
+    select.value = l.atemInput
+    select.onchange = () => action(select, async () => {
+      try { await save({ lamps: config.lamps.map(item => ({ id: item.id, atemInput: item.id === l.id ? Number(select.value) : item.atemInput })) }) }
+      finally { mapping(select.id) }
+    })
+    row.append(label, select); list.append(row)
   }
-  if (config.comPort) sel.value = config.comPort
+  mountSelects(list)
+  if (focused) document.getElementById(focused + '-trigger')?.focus({ preventScroll: true })
 }
-
-async function loadAtemInputs() {
-  try { atemInputs = await api('/api/atem/inputs') } catch { atemInputs = [] }
-}
-
-// Re-fetch ATEM inputs and refresh the dropdown options in place, keeping each
-// lamp's current selection. Called when the ATEM connects (inputs become known).
-async function refreshInputOptions() {
-  await loadAtemInputs()
-  document.querySelectorAll('#lamp-table tbody tr').forEach(tr => {
-    const sel = tr.querySelector('select.atem-input')
-    if (!sel) return
-    const current = sel.value
-    sel.innerHTML = buildInputSelect(Number(current)).innerHTML
-    sel.value = current
-  })
-}
-
-// ── Lamp map: fixed lamps (pins are hardcoded in the server), only the ATEM
-// input is editable, chosen from a dropdown of the real switcher inputs. ──────
-function buildInputSelect(selected) {
-  const sel = document.createElement('select')
-  sel.className = 'atem-input'
-  const list = atemInputs.length ? atemInputs : [{ id: selected, name: 'вход ' + selected }]
-  let matched = false
-  for (const inp of list) {
-    const o = document.createElement('option')
-    o.value = inp.id; o.textContent = inp.id + ' — ' + inp.name
-    if (Number(inp.id) === Number(selected)) { o.selected = true; matched = true }
-    sel.appendChild(o)
-  }
-  // Keep the saved value selectable even if the ATEM didn't report it (offline).
-  if (!matched && selected != null && selected !== '') {
-    const o = document.createElement('option')
-    o.value = selected; o.textContent = selected + ' — (текущий)'; o.selected = true
-    sel.appendChild(o)
-  }
-  return sel
-}
-
-function renderLampMap() {
-  const tbody = $('#lamp-table tbody')
-  tbody.innerHTML = ''
-  for (const l of (config.lamps || [])) {
-    const tr = document.createElement('tr')
-    tr.dataset.id = l.id
-    const tdId = document.createElement('td')
-    tdId.textContent = l.id
-    tr.appendChild(tdId)
-    const tdSel = document.createElement('td')
-    tdSel.appendChild(buildInputSelect(l.atemInput))
-    tr.appendChild(tdSel)
-    tbody.appendChild(tr)
+function tests() {
+  const list = $('#test-list')
+  list.replaceChildren()
+  for (const [color, name] of [['program', 'Program'], ['preview', 'Preview']]) {
+    const title = document.createElement('div')
+    title.className = 'bus-label test-label'
+    title.textContent = name
+    const bank = document.createElement('div')
+    bank.className = 'key-bank'
+    for (const lamp of config.lamps) {
+      const button = document.createElement('button')
+      button.textContent = 'TALLY ' + lamp.id
+      button.className = 'test-key'
+      button.dataset.id = lamp.id
+      button.dataset.color = color
+      button.setAttribute('aria-label', 'Тест ' + color + ' — Tally ' + lamp.id)
+      button.disabled = !connected
+      button.onclick = () => action(button, () => api('/api/test/lamp/' + lamp.id + '?color=' + color, {}, 'POST'))
+      bank.append(button)
+    }
+    list.append(title, bank)
   }
 }
-
-function collectConfig() {
-  const lamps = [...document.querySelectorAll('#lamp-table tbody tr')].map(tr => ({
-    id: Number(tr.dataset.id),
-    atemInput: Number(tr.querySelector('select.atem-input').value)
+function sourceName(lamp, sources) {
+  return lamp.atemInput === 0 ? 'Не назначено' : sources.find(input => input.id === lamp.atemInput)?.name || 'Вход ' + lamp.atemInput
+}
+function renderBank(selector, lamps, sources, signal) {
+  $(selector).replaceChildren(...lamps.map(lamp => {
+    const key = document.createElement('div')
+    const active = lamp[signal]
+    key.className = 'tally-key' + (active ? ' ' + signal : '') + (active && lamp.testing ? ' testing' : '')
+    key.setAttribute('role', 'img')
+    key.setAttribute('aria-label', 'Tally ' + lamp.id + ' · ' + sourceName(lamp, sources) + ' · ' + (active ? signal : 'выключено'))
+    const title = document.createElement('strong')
+    title.textContent = 'TALLY ' + lamp.id
+    const source = document.createElement('span')
+    source.textContent = sourceName(lamp, sources)
+    key.append(title, source)
+    return key
   }))
-  return {
-    comPort: $('#comPort').value,
-    baudRate: Number($('#baudRate').value),
-    atem: { ip: $('#atemIp').value, enabled: true },
-    http: { port: Number($('#httpPort').value), enabled: true },
-    defaultMode: $('#defaultMode').value,
-    onAtemDisconnect: $('#onAtemDisconnect').value,
-    lamps
-  }
 }
-
-function renderLamps(lamps) {
-  const box = $('#lamps')
-  box.innerHTML = ''
-  for (const l of lamps) {
-    const d = document.createElement('div')
-    d.className = 'lamp' + (l.program ? ' program' : l.preview ? ' preview' : '')
-    d.textContent = l.id
-    box.appendChild(d)
+function renderMixEffects(connections) {
+  const list = connections.mixEffects || []
+  const selected = connections.atemMe || config?.atem.me || 1
+  const select = $('#atem-me')
+  const signature = JSON.stringify([list, selected])
+  if (signature !== meSignature || Number(select.value) !== selected) {
+    meSignature = signature
+    select.replaceChildren(...list.map(bank => option(bank.id, bank.name)))
+    if (!list.some(bank => bank.id === selected)) select.append(option(selected, 'M/E ' + selected + (connections.atem ? ' · недоступен' : '')))
+    select.value = selected
   }
+  select.disabled = !connections.atem || !list.length
+  $('#atem-me-status').textContent = list.some(bank => bank.id === selected) ? 'Tally · M/E ' + selected : connections.atem ? 'Выберите доступный M/E' : ''
 }
-
-// ── Lamp test: momentary pulse, works in any mode (for checking wiring). ──────
-function renderLampTests() {
-  const box = document.querySelector('#lamp-tests .test-list')
-  if (!box) return
-  box.innerHTML = ''
-  for (const l of (config.lamps || [])) {
-    const row = document.createElement('div')
-    row.className = 'manual-row'
-    const label = document.createElement('span')
-    label.textContent = 'Лампа ' + l.id
-    row.appendChild(label)
-    for (const [color, text] of [['program', 'Тест P'], ['preview', 'Тест V']]) {
-      const btn = document.createElement('button')
-      btn.type = 'button'; btn.textContent = text; btn.className = 'btn-test'
-      btn.onclick = () => api('/api/test/lamp/' + l.id + '?color=' + color, { method: 'POST' }).catch(() => {})
-      row.appendChild(btn)
-    }
-    box.appendChild(row)
-  }
-}
-
-function renderManualControls() {
-  const section = $('#manual-controls')
-  if (!section) return
-  const list = section.querySelector('.manual-list')
-  list.innerHTML = ''
-  for (const l of (config.lamps || [])) {
-    const row = document.createElement('div')
-    row.className = 'manual-row'
-    const label = document.createElement('span')
-    label.textContent = 'Лампа ' + l.id + ' (вход ' + l.atemInput + ')'
-    row.appendChild(label)
-    for (const [state, text] of [['program', 'Program'], ['preview', 'Preview'], ['off', 'Off']]) {
-      const btn = document.createElement('button')
-      btn.type = 'button'; btn.textContent = text; btn.className = 'btn-manual'
-      btn.dataset.state = state; btn.dataset.input = l.atemInput
-      btn.onclick = () => api(manualTallyPath(l.atemInput, state), { method: 'POST' }).catch(() => {})
-      row.appendChild(btn)
-    }
-    list.appendChild(row)
-  }
-  updateManualButtonsState()
-}
-
-function updateManualButtonsState() {
-  const isManual = currentMode === 'manual'
-  document.querySelectorAll('.btn-manual').forEach(b => {
-    b.disabled = !isManual
-    b.classList.toggle('disabled', !isManual)
+function status(data) {
+  const c = data.connections
+  connected = !!c.com
+  $('#atem-dot').classList.toggle('on', !!c.atem)
+  $('#com-dot').classList.toggle('on', connected)
+  $('#atem-status').textContent = c.atem ? (c.atemName || 'Подключён') + ' · ' + c.atemIp : 'Не подключён'
+  const states = { searching: 'Поиск устройства…', connecting: 'Подключение…', 'selection-required': 'Найдено несколько устройств — выберите COM-порт', disconnected: 'Не подключён' }
+  $('#com-status').textContent = connected ? c.serial.port + ' · порт открыт' : c.serial.error || states[c.serial.state] || 'Поиск…'
+  const sources = data.inputs || []
+  renderBank('#program-lamps', data.lamps, sources, 'program')
+  renderBank('#preview-lamps', data.lamps, sources, 'preview')
+  renderMixEffects(c)
+  document.querySelectorAll('.test-key').forEach(button => {
+    button.disabled = !connected
+    const lamp = data.lamps.find(l => l.id === Number(button.dataset.id))
+    const active = !!lamp?.testing && lamp[button.dataset.color]
+    button.classList.toggle(button.dataset.color, active)
   })
-  const clearBtn = $('#manual-clear')
-  if (clearBtn) { clearBtn.disabled = !isManual; clearBtn.classList.toggle('disabled', !isManual) }
-}
-
-function setMode(mode) {
-  currentMode = mode
-  $('#mode-current').textContent = mode
-  document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode))
-  updateManualButtonsState()
-}
-
-function setStatus(conn) {
-  $('#st-atem').classList.toggle('on', !!conn?.atem)
-  $('#st-com').classList.toggle('on', !!conn?.com)
-  const nameEl = $('#atem-name')
-  if (nameEl) nameEl.textContent = conn?.atem ? (conn.atemName || '') : 'поиск ATEM…'
-}
-
-function connectEvents() {
-  const es = new EventSource('/events')
-  es.onmessage = (e) => {
-    const data = JSON.parse(e.data)
-    if (data.mode) setMode(data.mode)
-    if (data.lamps) renderLamps(data.lamps)
-    if (data.connections) {
-      setStatus(data.connections)
-      const nowConnected = !!data.connections.atem
-      if (nowConnected && !atemWasConnected) refreshInputOptions()
-      atemWasConnected = nowConnected
-    }
+  const next = JSON.stringify(sources)
+  if (next !== signature) {
+    signature = next
+    inputs = sources
+    if (config) mapping()
   }
 }
-
-document.querySelectorAll('.mode-btn').forEach(b => {
-  b.onclick = () => api('/mode/' + b.dataset.mode, { method: 'POST' })
+document.querySelectorAll('.tab').forEach(button => {
+  button.onclick = () => {
+    document.querySelectorAll('.tab').forEach(b => { const active = b === button; b.classList.toggle('active', active); b.setAttribute('aria-pressed', active) })
+    document.querySelectorAll('.page').forEach(page => { page.hidden = page.id !== button.dataset.tab })
+  }
 })
-$('#scan').onclick = async () => {
-  const list = $('#atem-list'); list.innerHTML = '<li>сканирование…</li>'
-  const found = await api('/api/atem/scan')
-  list.innerHTML = ''
-  for (const a of found) {
-    const li = document.createElement('li')
-    li.textContent = a.ip + (a.name ? ` — ${a.name}` : '')
-    const pick = document.createElement('button')
-    pick.textContent = 'выбрать'; pick.onclick = () => { $('#atemIp').value = a.ip }
-    li.appendChild(pick); list.appendChild(li)
+$('#atem-form').onsubmit = e => { e.preventDefault(); action(e.submitter, () => save({ atem: { ip: $('#atem-ip').value.trim(), enabled: true } })) }
+$('#serial-form').onsubmit = e => { e.preventDefault(); action(e.submitter, () => save({ comPort: $('#com-port').value, baudRate: Number($('#baud-rate').value) })) }
+$('#disconnect').onchange = () => action($('#disconnect'), () => save({ onAtemDisconnect: $('#disconnect').value }))
+$('#refresh-ports').onclick = () => action($('#refresh-ports'), loadPorts)
+$('#atem-me').onchange = () => action($('#atem-me'), async () => {
+  try { await save({ atem: { me: Number($('#atem-me').value) } }) }
+  finally { status(await api('/status')) }
+})
+$('#scan').onclick = () => action($('#scan'), async () => {
+  notice('Поиск ATEM в локальной сети…')
+  const found = await api('/api/atem/scan'); $('#devices').replaceChildren()
+  for (const device of found) {
+    const row = document.createElement('div'); row.className = 'device'
+    const label = document.createElement('span'); label.textContent = (device.name || 'ATEM') + ' · ' + device.ip
+    const button = document.createElement('button'); button.textContent = 'Подключить'
+    button.onclick = () => action(button, async () => { await save({ atem: { ip: device.ip, enabled: true } }); $('#atem-ip').value = device.ip })
+    row.append(label, button); $('#devices').append(row)
   }
-  if (!found.length) list.innerHTML = '<li>не найдено</li>'
-}
-$('#settings').onsubmit = async (e) => {
-  e.preventDefault()
-  try {
-    const res = await api('/api/config', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(collectConfig()) })
-    if (res && res.restartRequired) alert('Сохранено. Перезапустите сервер для применения: ' + (res.restartFields || []).join(', '))
-    else alert('Сохранено и применено')
+  notice(found.length ? 'Выберите нужный пульт' : 'Пульты не найдены. Можно указать IP вручную.')
+})
+async function boot() {
+  config = await api('/api/config')
+  $('#atem-ip').value = config.atem.ip; $('#baud-rate').value = config.baudRate; $('#disconnect').value = config.onAtemDisconnect
+  $('#com-port').value = config.comPort; await loadPorts()
+  mapping(); tests(); mountSelects()
+  const es = new EventSource('/events')
+  es.onmessage = e => { status(JSON.parse(e.data)); if (!streamLive) notice('Связь с сервером установлена'); streamLive = true }
+  es.onerror = () => {
+    streamLive = false; connected = false; $('#atem-status').textContent = 'Нет связи с сервером'; $('#com-status').textContent = 'Нет связи с сервером'
+    $('#atem-dot').classList.remove('on'); $('#com-dot').classList.remove('on')
+    document.querySelectorAll('#test-list button').forEach(b => { b.disabled = true })
+    notice('Связь с сервером потеряна. Переподключение…', true)
   }
-  catch { alert('Ошибка валидации конфига') }
 }
-
-$('#manual-clear').onclick = () => api('/clear', { method: 'POST' }).catch(() => {})
-
-loadConfig().then(connectEvents)
+boot().catch(e => notice(e.message, true))

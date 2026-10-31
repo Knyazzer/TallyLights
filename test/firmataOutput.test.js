@@ -122,7 +122,7 @@ describe('FirmataOutput', () => {
       comPort: 'COMX', baudRate: 57600, lamps, readyTimeoutMs: 20,
       boardFactory: () => board // factory never invokes cb → never ready
     })
-    await expect(out.connect()).rejects.toThrow(/not ready/)
+    await expect(out.connect()).rejects.toThrow(/serial connection/)
     expect(out.ready).toBe(false)
     expect(board.calls).toContainEqual(['close']) // port closed on timeout
   })
@@ -262,4 +262,15 @@ describe('FirmataOutput', () => {
     // OLD activePin 3 must have been driven LOW during setLamps
     expect(board.calls).toContainEqual(['write', 3, 0])
   })
+})
+
+it('drains LOW commands before closing a real serial transport', async () => {
+  const calls = []
+  const board = { pinMode() {}, digitalWrite() {}, on() {}, transport: {
+    isOpen: true, drain(cb) { calls.push('drain'); setTimeout(() => { calls.push('drained'); cb() }, 1) },
+    close(cb) { calls.push('close'); cb() }
+  } }
+  const out = new FirmataOutput({ comPort: 'COMX', lamps: [], boardFactory: (_p, _o, cb) => { queueMicrotask(cb); return board } })
+  await out.connect(); await out.close()
+  expect(calls).toEqual(['drain', 'drained', 'close'])
 })

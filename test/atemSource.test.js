@@ -3,6 +3,11 @@ import { EventEmitter } from 'node:events'
 import { AtemSource, extractTally } from '../src/sources/atemSource.js'
 
 describe('extractTally', () => {
+  it('reads the selected one-based M/E without falling back to another bus', () => {
+    const state = { video: { mixEffects: [{ programInput: 1, previewInput: 2 }, { programInput: 5, previewInput: 6 }] } }
+    expect(extractTally(state, 2)).toEqual({ program: [5], preview: [6] })
+    expect(extractTally(state, 3)).toEqual({ program: [], preview: [] })
+  })
   it('reads program and preview from ME 0', () => {
     const state = { video: { mixEffects: [{ programInput: 1, previewInput: 2 }] } }
     expect(extractTally(state)).toEqual({ program: [1], preview: [2] })
@@ -21,6 +26,27 @@ function fakeAtem() {
 }
 
 describe('AtemSource', () => {
+  it('uses device capabilities to list available M/E banks', () => {
+    const atem = fakeAtem()
+    atem.state.info = { capabilities: { mixEffects: 2 } }
+    const src = new AtemSource({ atemFactory: () => atem })
+    expect(src.getMixEffects()).toEqual([{ id: 1, name: 'M/E 1' }, { id: 2, name: 'M/E 2' }])
+    atem.state.info.capabilities.mixEffects = 1
+    expect(src.getMixEffects()).toEqual([{ id: 1, name: 'M/E 1' }])
+  })
+  it('switches tally to another M/E live without reconnecting', () => {
+    const atem = fakeAtem()
+    atem.state.info = { capabilities: { mixEffects: 2 } }
+    atem.state.video.mixEffects.push({ programInput: 7, previewInput: 8 })
+    const src = new AtemSource({ ip: '10.0.0.1', atemFactory: () => atem })
+    const tally = vi.fn(); src.on('tally', tally); src.start(); atem.emit('connected')
+    src.setMe(2)
+    expect(tally).toHaveBeenLastCalledWith({ program: [7], preview: [8] })
+    expect(atem.connect).toHaveBeenCalledTimes(1)
+    atem.state.info.capabilities.mixEffects = 1
+    atem.emit('stateChanged')
+    expect(tally).toHaveBeenLastCalledWith({ program: [], preview: [] })
+  })
   it('emits tally on connect and stateChanged', () => {
     const atem = fakeAtem()
     const src = new AtemSource({ ip: '1.2.3.4', atemFactory: () => atem })

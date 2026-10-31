@@ -1,169 +1,51 @@
 import express from 'express'
-import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const PUBLIC_DIR = path.join(__dirname, '..', '..', 'public')
-
-/**
- * Create the Express app (no listen — callers do that).
- *
- * @param {object} deps
- * @param {import('../tallyController.js').TallyController} deps.controller
- * @param {() => object}                deps.getConfig     - returns current config object
- * @param {(cfg: object) => object}     deps.saveConfigFn  - saves; throws on validation error
- * @param {() => Promise<object[]>}     deps.listPorts     - e.g. serialport.SerialPort.list()
- * @param {() => Promise<{ip:string}[]>} deps.scanAtem     - network scan for ATEMs
- * @param {(id:number, color:string) => Promise<void>} deps.testLamp
- * @param {() => {atem:boolean, com:boolean}} deps.getStatus
- * @returns {import('express').Express}
- */
-export function createApp({ controller, getConfig, saveConfigFn, listPorts, scanAtem, getAtemInputs, testLamp, getStatus }) {
+const PUBLIC_DIR = fileURLToPath(new URL('../../public', import.meta.url))
+export function createApp({ controller, getConfig, saveConfigFn, listPorts, scanAtem, getAtemInputs, testLamp, stopTests, getStatus, subscribe, reconnectSerial }) {
   const app = express()
-  app.use(express.json())
-
-  // ── KomusWatchdog: счётчик запросов + /health (+/routes) для мониторинга ──────
-  let requestCount = 0
-  app.use((req, _res, next) => { if (req.url !== '/health') requestCount++; next() })
-  app.get('/health', (_req, res) => res.json({ ok: true, requests: requestCount }))
-  app.get('/routes', (_req, res) => res.json([{ path: '/', label: 'Админка Tally' }]))
-
-  // ── mode ────────────────────────────────────────────────────────────────────
-  app.post('/mode/:mode', (req, res) => {
-    try {
-      controller.setMode(req.params.mode)
-      res.json({ mode: controller.getMode() })
-    } catch (e) {
-      res.status(400).json({ error: e.message })
-    }
-  })
-
-  app.get('/mode', (req, res) => {
-    res.json({ mode: controller.getMode() })
-  })
-
-  // ── tally commands (manual mode only) ──────────────────────────────────────
-  function requireManual(req, res) {
-    if (controller.getMode() !== 'manual') {
-      res.status(409).json({ error: 'server not in manual mode' })
-      return false
-    }
-    return true
-  }
-
-  function parseInput(req, res) {
-    const input = Number(req.params.input)
-    if (!Number.isFinite(input) || !Number.isInteger(input)) {
-      res.status(400).json({ error: 'invalid input: must be an integer' })
-      return null
-    }
-    return input
-  }
-
-  function tallyHandler(state) {
-    return (req, res) => {
-      if (!requireManual(req, res)) return
-      const input = parseInput(req, res)
-      if (input === null) return
-      controller.manualSet(input, state)
-      res.json({ ok: true })
-    }
-  }
-
-  app.post('/program/:input', tallyHandler('program'))
-  app.post('/preview/:input', tallyHandler('preview'))
-  app.post('/off/:input', tallyHandler('off'))
-
-  app.post('/clear', (req, res) => {
-    if (!requireManual(req, res)) return
-    controller.manualClear()
-    res.json({ ok: true })
-  })
-
-  // ── status ──────────────────────────────────────────────────────────────────
-  app.get('/status', (req, res) => {
-    res.json({
-      mode: controller.getMode(),
-      lamps: controller.computeLampStates(),
-      connections: getStatus()
-    })
-  })
-
-  // ── SSE /events ─────────────────────────────────────────────────────────────
+  app.use(express.json({ limit: '32kb' }))
+  const snapshot = () => ({ lamps: controller.computeLampStates(), connections: getStatus(), inputs: getAtemInputs?.() || [] })
+  app.get('/status', (_req, res) => res.json(snapshot()))
+  const clients = new Set()
+  const broadcast = () => { const message = `data: ${JSON.stringify(snapshot())}\n\n`; for (const client of clients) client.write(message) }
+  controller.on('change', broadcast)
+  const unsubscribe = subscribe?.(broadcast)
   app.get('/events', (req, res) => {
-    res.set({
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      Connection: 'keep-alive'
-    })
+    res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' })
     res.flushHeaders()
-
-    const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`)
-
-    // send current state immediately
-    send({ mode: controller.getMode(), lamps: controller.computeLampStates(), connections: getStatus() })
-
-    const onChange = (d) => send({ ...d, connections: getStatus() })
-    controller.on('change', onChange)
-
-    req.on('close', () => {
-      controller.off('change', onChange)
-    })
+    clients.add(res)
+    res.write(`data: ${JSON.stringify(snapshot())}\n\n`)
+    req.on('close', () => clients.delete(res))
   })
-
-  // ── admin API ────────────────────────────────────────────────────────────────
-  app.get('/api/config', (req, res) => {
-    res.json(getConfig())
-  })
-
-  app.put('/api/config', (req, res) => {
-    try {
-      const saved = saveConfigFn(req.body)
-      res.json(saved)
-    } catch (e) {
-      res.status(422).json({ error: e.message })
+  app.locals.dispose = () => {
+    controller.off('change', broadcast); unsubscribe?.()
+    for (const client of clients) client.end()
+    clients.clear()
+  }
+  app.get('/api/config', (_req, res) => res.json(getConfig()))
+  const save = async (req, res) => {
+    try { res.json(await saveConfigFn(req.body)) } catch (e) { res.status(422).json({ error: e.message }) }
+  }
+  app.put('/api/config', save)
+  app.patch('/api/config', save)
+  const asyncRoute = fn => async (req, res) => {
+    try { res.json(await fn(req)) } catch (e) { res.status(e.status || 500).json({ error: e.message }) }
+  }
+  app.get('/api/ports', asyncRoute(() => listPorts()))
+  app.get('/api/atem/scan', asyncRoute(() => scanAtem()))
+  app.get('/api/atem/inputs', (_req, res) => res.json(getAtemInputs?.() || []))
+  app.post('/api/serial/reconnect', asyncRoute(async () => { await reconnectSerial(); return { ok: true } }))
+  app.post('/api/test/stop', asyncRoute(async () => { stopTests(); return { ok: true } }))
+  app.post('/api/test/lamp/:id', asyncRoute(async req => {
+    const id = Number(req.params.id), color = req.query.color || 'program'
+    if (!Number.isInteger(id) || !getConfig().lamps.some(l => l.id === id) || !['program', 'preview'].includes(color)) {
+      const e = new Error('Unknown lamp or test color'); e.status = 400; throw e
     }
-  })
-
-  app.get('/api/ports', async (req, res) => {
-    try {
-      const ports = await listPorts()
-      res.json(ports)
-    } catch (e) {
-      res.status(500).json({ error: e.message })
-    }
-  })
-
-  app.get('/api/atem/scan', async (req, res) => {
-    try {
-      const devices = await scanAtem()
-      res.json(devices)
-    } catch (e) {
-      res.status(500).json({ error: e.message })
-    }
-  })
-
-  app.get('/api/atem/inputs', (req, res) => {
-    try {
-      res.json(getAtemInputs ? getAtemInputs() : [])
-    } catch (e) {
-      res.status(500).json({ error: e.message })
-    }
-  })
-
-  app.post('/api/test/lamp/:id', async (req, res) => {
-    try {
-      const id = Number(req.params.id)
-      const color = req.query.color || 'program'
-      await testLamp(id, color)
-      res.json({ ok: true })
-    } catch (e) {
-      res.status(500).json({ error: e.message })
-    }
-  })
-
-  // ── static admin UI ──────────────────────────────────────────────────────────
+    if (!getStatus().com) { const e = new Error('COM-порт не подключён'); e.status = 409; throw e }
+    await testLamp(id, color)
+    return { ok: true }
+  }))
   app.use(express.static(PUBLIC_DIR))
-
   return app
 }
