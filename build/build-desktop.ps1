@@ -1,4 +1,5 @@
-# Multi-file desktop build. Single-file portable packaging is a separate step.
+# Multi-file development build; build-portable.ps1 embeds this runtime in one EXE.
+param([string]$NodePath = (Get-Command node).Source)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $desktopOutput = Join-Path $projectRoot 'dist\TallyLights'
@@ -13,7 +14,7 @@ Copy-Item (Join-Path $projectRoot 'src') $desktopOutput -Recurse -Force
 Copy-Item (Join-Path $projectRoot 'public') $desktopOutput -Recurse -Force
 Copy-Item (Join-Path $projectRoot 'config.example.json') $desktopOutput -Force
 Copy-Item (Join-Path $projectRoot 'package.json') $desktopOutput -Force
-Copy-Item (Get-Command node).Source (Join-Path $desktopOutput 'node.exe') -Force
+Copy-Item -LiteralPath $NodePath -Destination (Join-Path $desktopOutput 'node.exe') -Force
 # Copy only installed production dependency trees; no install or network needed.
 Push-Location $projectRoot
 try {
@@ -27,9 +28,5 @@ foreach ($dependencyPath in $productionPaths) {
     New-Item -ItemType Directory -Force (Split-Path -Parent $destination) | Out-Null
     if (-not (Test-Path -LiteralPath $destination)) { Copy-Item -LiteralPath $dependencyPath -Destination $destination -Recurse }
 }
-$compiler = Join-Path $env:SystemRoot 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
-if (-not (Test-Path $compiler)) { throw 'Windows .NET Framework 4.x compiler was not found.' }
-$icon = Join-Path $PSScriptRoot 'app.ico'
-& $compiler /nologo /target:winexe /platform:x64 /optimize+ /utf8output "/out:$desktopOutput\TallyLights.exe" "/win32icon:$icon" "/resource:$icon,TallyLights.Icon" /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.Web.Extensions.dll (Join-Path $projectRoot 'desktop\Program.cs') (Join-Path $projectRoot 'desktop\Job.cs') (Join-Path $projectRoot 'desktop\ConsoleTheme.cs')
-if ($LASTEXITCODE -ne 0) { throw 'Desktop compilation failed.' }
+& (Join-Path $PSScriptRoot 'compile-desktop.ps1') -Output (Join-Path $desktopOutput 'TallyLights.exe')
 Write-Host "Ready: $desktopOutput\TallyLights.exe"

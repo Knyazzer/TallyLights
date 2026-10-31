@@ -12,6 +12,9 @@ logs/
 dist/
 build/stage/
 build/visual-preview/
+build/generated/
+.portable-build/
+TallyLights-data/
 
 # OS / editor
 .DS_Store

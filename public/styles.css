@@ -22,7 +22,9 @@ button:disabled { cursor: default; opacity: .45; }
 :focus-visible { outline: 1px solid #737b87; outline-offset: 2px; }
 .app-shell { height: 100dvh; min-height: 600px; display: grid; grid-template-rows: 58px minmax(0, 1fr) 64px 28px; }
 .app-header { background: #202224; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; }
-h1 { font-size: 20px; font-weight: 600; letter-spacing: -.5px; margin: 0; }
+h1 { display: flex; align-items: center; gap: 9px; font-size: 20px; font-weight: 600; letter-spacing: -.5px; margin: 0; }
+h1 img { flex-shrink: 0; }
+h1 small { font-size: 12px; font-weight: 400; color: var(--muted); letter-spacing: 0; margin-left: 4px; }
 h1 span { margin-left: 7px; color: var(--muted); font-weight: 400; font-size: 16px; }
 .product-link { font-size: 10px; color: var(--muted); letter-spacing: .6px; }
 .workspace { display: grid; grid-template-columns: minmax(0, 1fr) 250px; gap: 12px; padding: 14px; min-height: 0; }

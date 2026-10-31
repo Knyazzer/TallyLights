@@ -1,5 +1,7 @@
 #define MyAppName "TallyLights"
-#define MyAppVersion "0.2.0"
+#ifndef MyAppVersion
+#define MyAppVersion "0.3.0"
+#endif
 [Setup]
 AppId={{8F3A1C2E-5B6D-4E7F-9A0B-1C2D3E4F5A6B}
 AppName={#MyAppName}
@@ -11,7 +13,7 @@ DisableProgramGroupPage=yes
 UninstallDisplayIcon={app}\TallyLights.exe
 SetupIconFile=app.ico
 OutputDir=..\dist
-OutputBaseFilename=TallyLightsSetup
+OutputBaseFilename=TallyLightsSetup_V{#MyAppVersion}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern

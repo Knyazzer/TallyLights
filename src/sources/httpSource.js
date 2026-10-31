@@ -1,11 +1,12 @@
 import express from 'express'
 import { fileURLToPath } from 'node:url'
+import { version } from '../version.js'
 
 const PUBLIC_DIR = fileURLToPath(new URL('../../public', import.meta.url))
 export function createApp({ controller, getConfig, saveConfigFn, listPorts, scanAtem, getAtemInputs, testLamp, stopTests, getStatus, subscribe, reconnectSerial }) {
   const app = express()
   app.use(express.json({ limit: '32kb' }))
-  const snapshot = () => ({ lamps: controller.computeLampStates(), connections: getStatus(), inputs: getAtemInputs?.() || [] })
+  const snapshot = () => ({ version, lamps: controller.computeLampStates(), connections: getStatus(), inputs: getAtemInputs?.() || [] })
   app.get('/status', (_req, res) => res.json(snapshot()))
   const clients = new Set()
   const broadcast = () => { const message = `data: ${JSON.stringify(snapshot())}\n\n`; for (const client of clients) client.write(message) }

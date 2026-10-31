@@ -104,6 +104,10 @@ function renderMixEffects(connections) {
   $('#atem-me-status').textContent = list.some(bank => bank.id === selected) ? 'Tally · M/E ' + selected : connections.atem ? 'Выберите доступный M/E' : ''
 }
 function status(data) {
+  if (data.version) {
+    document.title = 'TallyLights v' + data.version
+    $('#app-version').textContent = 'v' + data.version
+  }
   const c = data.connections
   connected = !!c.com
   $('#atem-dot').classList.toggle('on', !!c.atem)

@@ -8,6 +8,8 @@ Node.js ESM + Express, нативная оболочка WinForms (.NET Framewor
 
 - npm test — Vitest, аппаратные зависимости инжектируются.
 - npm run build:desktop — dist/TallyLights/TallyLights.exe и runtime рядом.
+- npm run build:portable — dist/portable/TallyLights_V<version>.exe, всё внутри.
+- npm run test:portable — реальный EXE, изолированные данные, проверка рестарта.
 - npm start — сервер для разработки, без открытия браузера.
 - npm run build:installer — опциональная сборка Inno Setup.
 
@@ -42,5 +44,11 @@ Clear по умолчанию, Hold — явный выбор оператора
 Сначала перенастроить output, затем отправить актуальное состояние контроллера.
 Ошибки и отсутствие оборудования не должны мешать запуску интерфейса.
 Не копировать пользовательские config.json и TallyLights-data в дистрибутив.
-Оконная сборка выбирает свободный loopback-порт сама. Упаковка в единственный
-портативный файл пока не реализована.
+Оконная сборка выбирает свободный loopback-порт сама. RuntimePayload извлекает
+встроенный ZIP в уникальный временный каталог и удаляет его после остановки Node.
+Данные всегда рядом с исходным EXE, а не во временном runtime.
+build/runtime.json фиксирует официальный Node LTS и SHA-256; не включать
+локальный Node или личные настройки в портативный релиз.
+Версия в package.json/lock; compile-desktop.ps1 генерирует Version.cs.
+public/logo.svg и build/IconBuilder.cs содержат геометрию значка лампы;
+генератор создаёт build/app.ico (16–256 px), общий для EXE, окна и трея.

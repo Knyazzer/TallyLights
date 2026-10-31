@@ -14,15 +14,18 @@ using System.Windows.Forms;
 
 [assembly: AssemblyTitle("TallyLights")]
 [assembly: AssemblyProduct("TallyLights")]
-[assembly: AssemblyVersion("0.2.0.0")]
 
 internal static class Program {
-    [STAThread] static int Main() {
+    [STAThread] static int Main(string[] args) {
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
         string home = AppDomain.CurrentDomain.BaseDirectory;
         string hash;
         using (var sha = SHA256.Create()) hash = BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(home.ToLowerInvariant()))).Replace("-", "");
+        if (Array.IndexOf(args, "--exit") >= 0) {
+            try { using (var signal = EventWaitHandle.OpenExisting("Local\\TallyLightsStop-" + hash)) signal.Set(); } catch (WaitHandleCannotBeOpenedException) {}
+            return 0;
+        }
         bool owned;
         using (var mutex = new Mutex(true, "Local\\TallyLights-" + hash, out owned)) {
             if (!owned) {
@@ -31,9 +34,11 @@ internal static class Program {
             }
             try {
                 using (var show = new EventWaitHandle(false, EventResetMode.AutoReset, "Local\\TallyLightsShow-" + hash))
+                using (var stop = new EventWaitHandle(false, EventResetMode.AutoReset, "Local\\TallyLightsStop-" + hash))
                 using (var form = new MainForm(home)) {
                     var wait = ThreadPool.RegisterWaitForSingleObject(show, delegate { form.Reveal(); }, null, -1, false);
-                    try { Application.Run(form); } finally { wait.Unregister(null); }
+                    var stopWait = ThreadPool.RegisterWaitForSingleObject(stop, delegate { form.RequestQuit(); }, null, -1, false);
+                    try { Application.Run(form); } finally { wait.Unregister(null); stopWait.Unregister(null); }
                 }
                 return 0;
             } catch (Exception e) {
@@ -60,6 +65,7 @@ internal sealed class MainForm : Form {
     readonly Color green = ConsoleTheme.Preview, red = ConsoleTheme.Program;
     readonly JavaScriptSerializer json = new JavaScriptSerializer();
     readonly NotifyIcon tray;
+    readonly Bitmap logo;
     readonly System.Windows.Forms.Timer poll = new System.Windows.Forms.Timer();
     readonly Label atemStatus, serialStatus, notice, atemBank;
     readonly TallyKey[] programKeys = new TallyKey[6], previewKeys = new TallyKey[6];
@@ -75,6 +81,8 @@ internal sealed class MainForm : Form {
     string inputSignature = "", url;
     Process server;
     ServerJob job;
+    RuntimePayload runtime;
+    Task bootTask;
     bool quitting, busyPoll, loaded;
     readonly TaskCompletionSource<int> ready = new TaskCompletionSource<int>();
 
@@ -114,13 +122,15 @@ internal sealed class MainForm : Form {
     }
     public MainForm(string home) {
         this.home = home;
-        Text = "TallyLights";
+        Text = "TallyLights v" + AppInfo.Version;
         Font = new Font("Segoe UI", 9);
         BackColor = ConsoleTheme.Workspace; ForeColor = ink;
         AutoScaleMode = AutoScaleMode.Dpi;
         ClientSize = new Size(1220, 920); MinimumSize = new Size(1140, 860);
         StartPosition = FormStartPosition.CenterScreen;
         using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("TallyLights.Icon")) Icon = new Icon(stream);
+        using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("TallyLights.Logo"))
+        using (var source = Image.FromStream(stream)) logo = new Bitmap(source);
         var shell = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1, Padding = new Padding(0), Margin = new Padding(0) };
         shell.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         shell.RowStyles.Add(new RowStyle(SizeType.Absolute, 50)); shell.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -128,8 +138,10 @@ internal sealed class MainForm : Form {
         Controls.Add(shell);
         var heading = new ConsoleSurface { Dock = DockStyle.Fill, Gradient = true, Margin = new Padding(0), Padding = new Padding(19, 0, 19, 0) };
         var title = LabelOf("TallyLights  Software Control", 17, false);
+        title.Padding = new Padding(38, 0, 0, 0);
+        var brand = new PictureBox { Image = logo, SizeMode = PictureBoxSizeMode.Zoom, Size = new Size(28, 28), Location = new Point(19, 11), BackColor = Color.Transparent };
         var subtitle = Hint("BLACKMAGIC ATEM  /  AVMATRIX"); subtitle.Dock = DockStyle.Right; subtitle.Width = 257; subtitle.TextAlign = ContentAlignment.MiddleRight;
-        heading.Controls.Add(title); heading.Controls.Add(subtitle); shell.Controls.Add(heading, 0, 0);
+        heading.Controls.Add(title); heading.Controls.Add(subtitle); heading.Controls.Add(brand); brand.BringToFront(); shell.Controls.Add(heading, 0, 0);
         var workspace = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Padding = new Padding(10), Margin = new Padding(0) };
         workspace.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); workspace.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 272));
         shell.Controls.Add(workspace, 0, 1);
@@ -278,21 +290,18 @@ internal sealed class MainForm : Form {
             nav[n].Click += delegate { SelectPage(index); }; navigation.Controls.Add(nav[n]);
         }
         footerLayout.Controls.Add(navigation, 1, 0);
-        var windowActions = new FlowLayoutPanel { Dock = DockStyle.Right, AutoSize = true, WrapContents = false, Padding = new Padding(5, 12, 8, 0), Margin = new Padding(0) };
-        var hideButton = ButtonOf("В трей"); hideButton.Width = 78; hideButton.Click += delegate { Hide(); };
-        var quitButton = ButtonOf("Выход"); quitButton.Width = 78; quitButton.Click += async delegate { await Quit(); };
-        windowActions.Controls.Add(hideButton); windowActions.Controls.Add(quitButton); footerLayout.Controls.Add(windowActions, 2, 0);
         footer.Controls.Add(footerLayout); shell.Controls.Add(footer, 0, 2);
         notice = Hint("Запуск локального сервера…"); notice.Padding = new Padding(13, 0, 0, 0); notice.BackColor = ConsoleTheme.Well; notice.Margin = new Padding(0); shell.Controls.Add(notice, 0, 3);
-        tray = new NotifyIcon { Icon = Icon, Text = "TallyLights", Visible = true };
+        notice.TextChanged += delegate { shell.RowStyles[3].Height = string.IsNullOrEmpty(notice.Text) ? 0 : 26; };
+        tray = new NotifyIcon { Icon = Icon, Text = Text, Visible = true };
         var menu = new ContextMenuStrip { BackColor = ConsoleTheme.Panel, ForeColor = ink };
         menu.Items.Add("Открыть TallyLights", null, delegate { Reveal(); });
-        menu.Items.Add("Выход", null, async delegate { await Quit(); });
+        menu.Items.Add("Завершить процесс", null, async delegate { await Quit(); });
         tray.ContextMenuStrip = menu; tray.DoubleClick += delegate { Reveal(); };
         FormClosing += delegate(object sender, FormClosingEventArgs e) { if (!quitting) { e.Cancel = true; Hide(); } };
         Resize += delegate { if (WindowState == FormWindowState.Minimized) Hide(); };
         poll.Interval = 750; poll.Tick += async delegate { await Poll(); };
-        Shown += async delegate { await Boot(); };
+        Shown += delegate { bootTask = Boot(); };
         SelectPage(1);
     }
     void SelectPage(int index) {
@@ -310,10 +319,13 @@ internal sealed class MainForm : Form {
         if (InvokeRequired) { BeginInvoke((Action)Reveal); return; }
         Show(); WindowState = FormWindowState.Normal; Activate();
     }
+    public void RequestQuit() {
+        if (!IsDisposed && IsHandleCreated) BeginInvoke((Action)(async delegate { await Quit(); }));
+    }
     async Task Action(Control control, Func<Task> action) {
         if (!loaded) return;
         control.Enabled = false; notice.Text = "Выполняется…"; notice.ForeColor = muted;
-        try { await action(); notice.Text = "Готово"; await Poll(); }
+        try { await action(); notice.Text = ""; await Poll(); }
         catch (Exception e) { notice.Text = e.Message; notice.ForeColor = red; }
         finally { if (!quitting && control != meSelector) control.Enabled = true; }
     }
@@ -421,7 +433,7 @@ internal sealed class MainForm : Form {
                 ip.Text = TextOf(Get(Get(config, "atem"), "ip")); baud.Text = TextOf(Get(config, "baudRate"));
                 Choose(disconnect, TextOf(Get(config, "onAtemDisconnect")));
                 await LoadPorts(); RenderMappings(); loaded = true;
-                notice.Text = "Готово · закрытие окна сворачивает приложение в трей";
+                notice.Text = "";
             }
         } catch (Exception e) {
             atemStatus.Text = "●  ATEM · нет данных"; atemStatus.ForeColor = muted;
@@ -433,8 +445,11 @@ internal sealed class MainForm : Form {
     async Task Boot() {
         try {
             Directory.CreateDirectory(Path.Combine(home, "TallyLights-data"));
-            var start = new ProcessStartInfo(Path.Combine(home, "node.exe"), "src/index.js --desktop") {
-                WorkingDirectory = home, UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden,
+            runtime = await Task.Run(() => RuntimePayload.Open(home));
+            if (quitting) return;
+            Receive("TALLY_RUNTIME " + runtime.Root);
+            var start = new ProcessStartInfo(Path.Combine(runtime.Root, "node.exe"), "src/index.js --desktop") {
+                WorkingDirectory = runtime.Root, UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden,
                 RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
                 StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8
             };
@@ -456,10 +471,12 @@ internal sealed class MainForm : Form {
             server.BeginOutputReadLine(); server.BeginErrorReadLine();
             if (await Task.WhenAny(ready.Task, Task.Delay(15000)) != ready.Task) throw new Exception("Сервер не запустился за 15 секунд. Проверьте server.log.");
             int port = await ready.Task;
+            if (quitting) return;
             if (server.HasExited) throw new Exception("Сервер завершился при запуске.");
             url = "http://127.0.0.1:" + port;
             await Poll(); poll.Start();
         } catch (Exception e) {
+            if (quitting) return;
             notice.Text = e.Message; notice.ForeColor = red;
             MessageBox.Show(this, e.Message, "TallyLights — ошибка запуска", MessageBoxButtons.OK, MessageBoxIcon.Error);
             BeginInvoke((Action)(async delegate { await Quit(); }));
@@ -483,6 +500,8 @@ internal sealed class MainForm : Form {
     async Task Quit() {
         if (quitting) return;
         quitting = true; poll.Stop(); notice.Text = "Завершение работы…";
+        ready.TrySetCanceled();
+        if (bootTask != null) await bootTask;
         await Task.Run((Action)(delegate {
             if (server == null) return;
             try {
@@ -499,6 +518,8 @@ internal sealed class MainForm : Form {
             poll.Dispose(); tray.Dispose();
             if (job != null) job.Dispose();
             if (server != null) server.Dispose();
+            if (runtime != null) runtime.Dispose();
+            logo.Dispose();
         }
         base.Dispose(disposing);
     }
