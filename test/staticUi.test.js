@@ -13,6 +13,6 @@ describe('static admin UI', () => {
       testLamp: async () => {}, getStatus: () => ({ atem: false, com: false })
     })
     const res = await request(app).get('/').expect(200)
-    expect(res.text).toContain('TallyLights')
+    expect(res.text).toContain('Tally Lights')
   })
 })

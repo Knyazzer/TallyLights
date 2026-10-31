@@ -10,6 +10,7 @@ Node.js ESM + Express, нативная оболочка WinForms (.NET Framewor
 - npm run build:desktop — dist/TallyLights/TallyLights.exe и runtime рядом.
 - npm run build:portable — dist/portable/TallyLights_V<version>.exe, всё внутри.
 - npm run test:portable — реальный EXE, изолированные данные, проверка рестарта.
+- npm run test:desktop — WinForms-меню и регрессии компоновки, без backend/железа.
 - npm start — сервер для разработки, без открытия браузера.
 - npm run build:installer — опциональная сборка Inno Setup.
 
@@ -30,6 +31,13 @@ Node.js ESM + Express, нативная оболочка WinForms (.NET Framewor
 - src/sources/httpSource.js — API/SSE и резервная веб-админка.
 - desktop/ — нативное окно с тремя вкладками, трей, single instance,
   скрытый Node-процесс, Job Object и завершение через stdin.
+- desktop/ConsoleSelect.cs — собственный селектор с ToolStrip popup, без системного
+  ComboBox/WndProc-рисования. Освобождение popup отложено до завершения Closed.
+  Операции не меняют размеры shell; progress — внутри кнопки. Не добавлять
+  глобальную нижнюю строку и дублирующие иконки во внутреннюю шапку.
+  Рамка редактора — отдельный ConsoleSurface с Padding=1; страницы внутри —
+  ConsolePanel с AutoScroll, без собственных рамок. test:desktop проверяет
+  весь периметр по пикселям для трёх вкладок/размеров окна.
 - public/ — настройки, маппинг, тесты, без отдельного ручного управления.
   public/select.js — собственные тёмные меню поверх HTML select, с клавиатурным управлением.
 

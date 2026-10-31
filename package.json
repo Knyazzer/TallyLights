@@ -1,6 +1,6 @@
 {
   "name": "tallylights",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "type": "module",
   "description": "Blackmagic ATEM to AVMATRIX TS3019-6 tally bridge",
@@ -11,7 +11,8 @@
     "build:installer": "powershell -ExecutionPolicy Bypass -File build/build-installer.ps1",
     "build:desktop": "powershell -ExecutionPolicy Bypass -File build/build-desktop.ps1",
     "build:portable": "powershell -ExecutionPolicy Bypass -File build/build-portable.ps1",
-    "test:portable": "powershell -ExecutionPolicy Bypass -File build/test-portable.ps1"
+    "test:portable": "powershell -ExecutionPolicy Bypass -File build/test-portable.ps1",
+    "test:desktop": "powershell -ExecutionPolicy Bypass -File build/test-desktop.ps1"
   },
   "dependencies": {
     "atem-connection": "^3.9.0",

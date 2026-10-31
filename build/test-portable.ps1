@@ -50,10 +50,10 @@ try {
     $titleDeadline = [DateTime]::UtcNow.AddSeconds(5)
     do {
         $script:application.Refresh()
-        if ($script:application.MainWindowTitle -eq "TallyLights v$version") { break }
+        if ($script:application.MainWindowTitle -eq "Tally Lights v$version") { break }
         Start-Sleep -Milliseconds 100
     } while ([DateTime]::UtcNow -lt $titleDeadline)
-    if ($script:application.MainWindowTitle -ne "TallyLights v$version") { throw "Native window version mismatch: $($script:application.MainWindowTitle)" }
+    if ($script:application.MainWindowTitle -ne "Tally Lights v$version") { throw "Native window version mismatch: $($script:application.MainWindowTitle)" }
     Api '/api/ports' | Out-Null # Exercises the real native SerialPort.list binding in the extracted runtime.
     $expected = @{
         comPort = 'COM55555'; baudRate = 115200; onAtemDisconnect = 'hold'

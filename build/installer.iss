@@ -1,6 +1,6 @@
 #define MyAppName "TallyLights"
 #ifndef MyAppVersion
-#define MyAppVersion "0.3.0"
+#define MyAppVersion "0.3.1"
 #endif
 [Setup]
 AppId={{8F3A1C2E-5B6D-4E7F-9A0B-1C2D3E4F5A6B}

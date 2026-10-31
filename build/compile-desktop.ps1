@@ -19,11 +19,11 @@ using System.Reflection;
 internal static class AppInfo { public const string Version = "$version"; }
 "@ | Set-Content -LiteralPath $versionSource -Encoding UTF8
 $arguments = @('/nologo', '/target:winexe', '/platform:x64', '/optimize+', '/utf8output',
-    "/out:$Output", "/win32icon:$icon", "/resource:$icon,TallyLights.Icon", "/resource:$(Join-Path $generated 'logo.png'),TallyLights.Logo",
+    "/out:$Output", "/win32icon:$icon", "/resource:$icon,TallyLights.Icon",
     '/reference:System.Windows.Forms.dll', '/reference:System.Drawing.dll', '/reference:System.Web.Extensions.dll',
     '/reference:System.IO.Compression.dll', '/reference:System.IO.Compression.FileSystem.dll',
     (Join-Path $projectRoot 'desktop\Program.cs'), (Join-Path $projectRoot 'desktop\Job.cs'),
-    (Join-Path $projectRoot 'desktop\ConsoleTheme.cs'), (Join-Path $projectRoot 'desktop\RuntimePayload.cs'), $versionSource)
+    (Join-Path $projectRoot 'desktop\ConsoleTheme.cs'), (Join-Path $projectRoot 'desktop\ConsoleSelect.cs'), (Join-Path $projectRoot 'desktop\RuntimePayload.cs'), $versionSource)
 if ($Payload) { $arguments += "/resource:$Payload,TallyLights.Payload" }
 & $compiler @arguments
 if ($LASTEXITCODE -ne 0) { throw 'Desktop compilation failed.' }

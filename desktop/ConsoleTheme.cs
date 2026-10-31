@@ -30,15 +30,27 @@ internal static class ConsoleTheme {
 }
 internal sealed class ConsoleSurface : Panel {
     public bool Gradient;
-    public ConsoleSurface() { DoubleBuffered = true; BackColor = ConsoleTheme.Panel; }
+    public ConsoleSurface() { DoubleBuffered = true; BackColor = ConsoleTheme.Panel; SetStyle(ControlStyles.ResizeRedraw | ControlStyles.AllPaintingInWmPaint, true); }
     protected override void OnPaintBackground(PaintEventArgs e) {
-        if (Gradient) e.Graphics.Clear(Color.FromArgb(32, 34, 36));
-        else base.OnPaintBackground(e);
+        e.Graphics.Clear(Gradient ? Color.FromArgb(32, 34, 36) : BackColor);
     }
     protected override void OnPaint(PaintEventArgs e) {
         base.OnPaint(e);
         if (Width > 1 && Height > 1) ConsoleTheme.Frame(e.Graphics, new Rectangle(0, 0, Width - 1, Height - 1), Color.FromArgb(65, 65, 65), ConsoleTheme.Line);
     }
+    protected override void OnResize(EventArgs e) { base.OnResize(e); Invalidate(true); }
+}
+internal sealed class ConsoleTable : TableLayoutPanel {
+    public ConsoleTable() { DoubleBuffered = true; BackColor = ConsoleTheme.Panel; SetStyle(ControlStyles.ResizeRedraw | ControlStyles.AllPaintingInWmPaint, true); }
+    protected override void OnResize(EventArgs e) { base.OnResize(e); Invalidate(true); }
+}
+internal sealed class ConsoleFlow : FlowLayoutPanel {
+    public ConsoleFlow() { DoubleBuffered = true; SetStyle(ControlStyles.ResizeRedraw | ControlStyles.AllPaintingInWmPaint, true); }
+    protected override void OnResize(EventArgs e) { base.OnResize(e); Invalidate(true); }
+}
+internal sealed class ConsolePanel : Panel {
+    public ConsolePanel() { DoubleBuffered = true; BackColor = ConsoleTheme.Panel; SetStyle(ControlStyles.ResizeRedraw | ControlStyles.AllPaintingInWmPaint, true); }
+    protected override void OnResize(EventArgs e) { base.OnResize(e); Invalidate(true); }
 }
 internal sealed class ConsoleButton : Button {
     public bool Navigation, Active, Key;
@@ -137,31 +149,5 @@ internal sealed class TallyKey : Control {
         TextRenderer.DrawText(g, text, font, Rectangle.Inflate(r, -7, -6), enabled ? ConsoleTheme.Text : ConsoleTheme.Muted,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.WordBreak);
 
-    }
-}
-internal sealed class ConsoleCombo : ComboBox {
-    public ConsoleCombo() {
-        BackColor = ConsoleTheme.Well; ForeColor = ConsoleTheme.Text; FlatStyle = FlatStyle.Flat;
-        Font = new Font("Segoe UI", 9); DrawMode = DrawMode.OwnerDrawFixed; ItemHeight = 22;
-    }
-    protected override void OnDrawItem(DrawItemEventArgs e) {
-        bool selected = (e.State & DrawItemState.Selected) != 0;
-        using (var brush = new SolidBrush(selected ? Color.FromArgb(45, 48, 52) : ConsoleTheme.Well)) e.Graphics.FillRectangle(brush, e.Bounds);
-        if (e.Index >= 0) TextRenderer.DrawText(e.Graphics, GetItemText(Items[e.Index]), Font, e.Bounds, ConsoleTheme.Text,
-            TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.LeftAndRightPadding);
-    }
-    protected override void WndProc(ref Message message) {
-        base.WndProc(ref message);
-        if ((message.Msg == 0x000F || message.Msg == 0x0085) && IsHandleCreated) {
-            using (var g = Graphics.FromHwnd(Handle)) {
-                var arrow = new Rectangle(Width - 20, 1, 19, Height - 2);
-                ConsoleTheme.Fill(g, arrow, ConsoleTheme.Well, ConsoleTheme.Well);
-                using (var pen = new Pen(Color.FromArgb(66, 71, 79))) g.DrawRectangle(pen, 0, 0, Width - 1, Height - 1);
-                using (var brush = new SolidBrush(ConsoleTheme.Muted)) {
-                    int x = Width - 11, y = Height / 2;
-                    g.FillPolygon(brush, new[] { new Point(x - 4, y - 2), new Point(x + 4, y - 2), new Point(x, y + 2) });
-                }
-            }
-        }
     }
 }

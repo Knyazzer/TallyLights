@@ -105,8 +105,7 @@ function renderMixEffects(connections) {
 }
 function status(data) {
   if (data.version) {
-    document.title = 'TallyLights v' + data.version
-    $('#app-version').textContent = 'v' + data.version
+    document.title = 'Tally Lights v' + data.version
   }
   const c = data.connections
   connected = !!c.com
